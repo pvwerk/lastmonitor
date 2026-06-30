@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Küchen-Lastmonitor</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body class="display">
+  <!-- Farbiger Rand-Ring rund um den Bildschirm -->
+  <div id="ring" class="ring"></div>
+
+  <main id="main" class="screen level-offline">
+    <div class="title" id="title">Küche – Netzbezug</div>
+
+    <!-- Tacho -->
+    <div class="gauge-wrap">
+      <svg viewBox="0 0 200 120" class="gauge" preserveAspectRatio="xMidYMid meet">
+        <path class="gauge-bg" d="M10 110 A 90 90 0 0 1 190 110" />
+        <path id="gaugeFill" class="gauge-fill" d="M10 110 A 90 90 0 0 1 190 110" />
+        <line id="needle" class="needle" x1="100" y1="110" x2="100" y2="30" />
+        <circle cx="100" cy="110" r="7" class="needle-hub" />
+      </svg>
+      <div class="gauge-center">
+        <div class="power" id="power">–</div>
+        <div class="power-unit">kW</div>
+      </div>
+    </div>
+
+    <!-- Auslastung -->
+    <div class="pct-row">
+      <span id="pct" class="pct">– %</span>
+      <span class="pct-label">der Anschlussleistung (<span id="maxkw">–</span> kW)</span>
+    </div>
+
+    <!-- Phasen -->
+    <div class="phases" id="phases"></div>
+
+    <!-- Status / Fehler -->
+    <div class="status" id="status">Verbinde …</div>
+  </main>
+
+  <!-- Vollflächige Warnung bei kritischem Pegel -->
+  <div id="overlay" class="overlay hidden">
+    <div class="overlay-text" id="overlayText">STROM REDUZIEREN!</div>
+    <div class="overlay-sub" id="overlaySub">Netzanschluss fast ausgelastet</div>
+  </div>
+
+  <script src="/static/display.js"></script>
+</body>
+</html>

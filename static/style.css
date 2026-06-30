@@ -1,0 +1,188 @@
+:root {
+  --ok: #16a34a;
+  --warn: #f59e0b;
+  --critical: #dc2626;
+  --offline: #64748b;
+  --bg: #0b1220;
+  --fg: #e5edff;
+  --muted: #9fb0d0;
+  --state: var(--offline);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  height: 100%;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* ---- Rand-Ring (permanenter Zustand) ---- */
+.ring {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  border: 14px solid var(--state);
+  z-index: 50;
+  transition: border-color .4s ease;
+}
+.level-critical ~ .ring,
+body.crit .ring { animation: ringpulse 1s infinite; }
+@keyframes ringpulse {
+  0%, 100% { border-color: var(--critical); }
+  50%      { border-color: #7f1d1d; }
+}
+
+/* ---- Hauptbereich ---- */
+.screen {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1.2vh;
+  text-align: center;
+  padding: 4vh 4vw;
+}
+.title {
+  font-size: 3.2vh;
+  font-weight: 600;
+  color: var(--muted);
+  letter-spacing: .02em;
+}
+
+/* ---- Tacho ---- */
+.gauge-wrap { position: relative; width: min(70vw, 90vh); }
+.gauge { width: 100%; display: block; }
+.gauge-bg { fill: none; stroke: #1e293b; stroke-width: 16; stroke-linecap: round; }
+.gauge-fill {
+  fill: none;
+  stroke: var(--state);
+  stroke-width: 16;
+  stroke-linecap: round;
+  stroke-dasharray: 283;       /* Länge des Halbkreises (π·90 ≈ 283) */
+  stroke-dashoffset: 283;
+  transition: stroke-dashoffset .5s ease, stroke .4s ease;
+}
+.needle {
+  stroke: var(--fg);
+  stroke-width: 3;
+  transform-origin: 100px 110px;
+  transform: rotate(-90deg);
+  transition: transform .5s ease;
+}
+.needle-hub { fill: var(--fg); }
+
+.gauge-center {
+  position: absolute;
+  left: 0; right: 0;
+  bottom: 6%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.power { font-size: 13vh; font-weight: 800; line-height: 1; color: var(--state); transition: color .4s ease; }
+.power-unit { font-size: 3.5vh; color: var(--muted); margin-top: .3vh; }
+
+/* ---- Auslastung ---- */
+.pct-row { display: flex; align-items: baseline; gap: 1vw; flex-wrap: wrap; justify-content: center; }
+.pct { font-size: 5vh; font-weight: 700; color: var(--state); }
+.pct-label { font-size: 2.4vh; color: var(--muted); }
+
+/* ---- Phasen ---- */
+.phases { display: flex; gap: 2vw; margin-top: 1vh; }
+.phase {
+  background: #111a2e;
+  border: 1px solid #1e293b;
+  border-radius: 12px;
+  padding: 1.2vh 2vw;
+  min-width: 14vw;
+}
+.phase .p-name { font-size: 2vh; color: var(--muted); }
+.phase .p-val  { font-size: 3.2vh; font-weight: 700; }
+.phase .p-cur  { font-size: 1.8vh; color: var(--muted); }
+
+/* ---- Status ---- */
+.status { font-size: 2.4vh; color: var(--muted); margin-top: 1vh; min-height: 3vh; }
+.status.err { color: var(--critical); font-weight: 700; }
+
+/* ---- Zustandsfarben ---- */
+.level-ok       { --state: var(--ok); }
+.level-warn     { --state: var(--warn); }
+.level-critical { --state: var(--critical); }
+.level-offline  { --state: var(--offline); }
+
+/* ---- Vollbild-Warnung ---- */
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: rgba(220, 38, 38, .96);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2vh;
+  animation: flash 1s infinite;
+}
+.overlay.hidden { display: none; }
+.overlay-text { font-size: 12vh; font-weight: 900; color: #fff; letter-spacing: .03em; text-align: center; }
+.overlay-sub  { font-size: 4vh; color: #ffe4e4; }
+@keyframes flash {
+  0%, 100% { background: rgba(220, 38, 38, .96); }
+  50%      { background: rgba(120, 10, 10, .96); }
+}
+
+/* ===========================================================
+   Einstellungen
+   =========================================================== */
+body.settings {
+  overflow: auto;
+  background: #0b1220;
+  padding: 24px;
+}
+.settings-wrap { max-width: 760px; margin: 0 auto; }
+.settings h1 { font-size: 24px; margin-bottom: 4px; }
+.settings .lead { color: var(--muted); margin-bottom: 24px; font-size: 14px; }
+.card {
+  background: #111a2e;
+  border: 1px solid #1e293b;
+  border-radius: 14px;
+  padding: 20px;
+  margin-bottom: 18px;
+}
+.card h2 { font-size: 16px; margin-bottom: 14px; color: var(--fg); }
+.field { margin-bottom: 14px; }
+.field label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 5px; }
+.field input, .field select {
+  width: 100%;
+  background: #0b1220;
+  border: 1px solid #243049;
+  border-radius: 9px;
+  color: var(--fg);
+  padding: 10px 12px;
+  font-size: 15px;
+}
+.row { display: flex; gap: 12px; }
+.row .field { flex: 1; }
+.hint { font-size: 12px; color: var(--muted); margin-top: 4px; }
+.btns { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 8px; }
+button {
+  border: none;
+  border-radius: 10px;
+  padding: 12px 20px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.btn-primary { background: #2563eb; color: #fff; }
+.btn-ghost { background: #1e293b; color: var(--fg); }
+.msg { margin-top: 14px; font-size: 14px; min-height: 20px; }
+.msg.ok { color: var(--ok); }
+.msg.err { color: var(--critical); }
+.toggle { display: flex; align-items: center; gap: 10px; }
+.toggle input { width: auto; }

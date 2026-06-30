@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Lastmonitor – Einstellungen</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body class="settings">
+  <div class="settings-wrap">
+    <h1>Küchen-Lastmonitor – Einstellungen</h1>
+    <p class="lead">Werte ändern und speichern. Die Anzeige in der Küche aktualisiert sich automatisch.
+      <a href="/" style="color:#60a5fa">→ Zur Anzeige</a></p>
+
+    <div class="card">
+      <h2>Verbindung zum PLEXLOG (Modbus TCP)</h2>
+      <div class="field">
+        <label>Profil</label>
+        <select id="profile">
+          <option value="nativ">PLEXLOG nativ – Port 503, Input-Register, int32, Watt (empfohlen)</option>
+          <option value="gateway">OpenGateway – Port 1502, Holding-Register, float32, MW</option>
+          <option value="custom">Benutzerdefiniert</option>
+        </select>
+        <div class="hint">Profil setzt sinnvolle Standardwerte. Felder bleiben einzeln änderbar.</div>
+      </div>
+      <div class="row">
+        <div class="field" style="flex:2">
+          <label>IP-Adresse des PLEXLOG</label>
+          <input id="host" placeholder="z. B. 192.168.1.50" />
+        </div>
+        <div class="field">
+          <label>Port</label>
+          <input id="port" type="number" value="503" />
+        </div>
+        <div class="field">
+          <label>UnitID</label>
+          <input id="unit_id" type="number" value="1" />
+        </div>
+      </div>
+      <div class="row">
+        <div class="field">
+          <label>Funktionscode</label>
+          <select id="function">
+            <option value="input">Input Register (FC4)</option>
+            <option value="holding">Holding Register (FC3)</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Datentyp</label>
+          <select id="datatype">
+            <option value="int32">int32 (ganzzahlig, Watt)</option>
+            <option value="uint32">uint32</option>
+            <option value="float32">float32 (Gleitkomma)</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Skalierung (Roh → kW)</label>
+          <input id="power_scale" type="number" step="0.000001" value="0.001" />
+          <div class="hint">Watt → 0.001, MW → 1000</div>
+        </div>
+      </div>
+      <div class="row">
+        <div class="field">
+          <label>Byte-Reihenfolge</label>
+          <select id="byte_order">
+            <option value="big">Big Endian (Standard)</option>
+            <option value="little">Little Endian</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Wort-Reihenfolge</label>
+          <select id="word_order">
+            <option value="big">High word zuerst (Standard)</option>
+            <option value="little">Low word zuerst</option>
+          </select>
+        </div>
+        <div class="field toggle" style="align-self:end">
+          <input id="invert_sign" type="checkbox" />
+          <label style="margin:0">Vorzeichen umkehren</label>
+        </div>
+      </div>
+      <div class="btns">
+        <button class="btn-ghost" id="btnTest">Verbindung testen</button>
+        <span id="testMsg" class="msg"></span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Netzbezug ermitteln</h2>
+      <div class="field">
+        <label>Berechnung</label>
+        <select id="grid_mode">
+          <option value="register">Direkt aus einem Register (ohne PV)</option>
+          <option value="calc">Verbrauch − PV-Erzeugung (mit PV-Anlage)</option>
+        </select>
+        <div class="hint">Küche ohne PV: „Direkt aus einem Register" mit Register 2 (Verbrauch).</div>
+      </div>
+      <div class="row">
+        <div class="field">
+          <label>Register Verbrauch / Netzbezug</label>
+          <input id="r_power_total" type="number" value="2" />
+        </div>
+        <div class="field" id="prodField">
+          <label>Register PV-Erzeugung</label>
+          <input id="r_production" type="number" value="0" />
+          <div class="hint">Nur bei „Verbrauch − PV".</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" id="phaseCard">
+      <h2>Phasen (optional, nur OpenGateway-Profil)</h2>
+      <div class="row">
+        <div class="field"><label>Wirkleistung L1</label><input id="r_power_l1" type="number" placeholder="leer = aus" /></div>
+        <div class="field"><label>Wirkleistung L2</label><input id="r_power_l2" type="number" placeholder="leer = aus" /></div>
+        <div class="field"><label>Wirkleistung L3</label><input id="r_power_l3" type="number" placeholder="leer = aus" /></div>
+      </div>
+      <div class="row">
+        <div class="field"><label>Strom L1</label><input id="r_current_l1" type="number" placeholder="leer = aus" /></div>
+        <div class="field"><label>Strom L2</label><input id="r_current_l2" type="number" placeholder="leer = aus" /></div>
+        <div class="field"><label>Strom L3</label><input id="r_current_l3" type="number" placeholder="leer = aus" /></div>
+      </div>
+      <div class="hint">Beim nativen Profil leer lassen – diese Werte sind dort nicht verfügbar.</div>
+    </div>
+
+    <div class="card">
+      <h2>Grenzwerte (Netzanschluss)</h2>
+      <div class="row">
+        <div class="field">
+          <label>Maximale Anschlussleistung (kW)</label>
+          <input id="max_power_kw" type="number" step="0.1" value="43" />
+          <div class="hint">100 % = dieser Wert. Tipp: Absicherung (A) × 3 × 230 V ÷ 1000.</div>
+        </div>
+        <div class="field">
+          <label>Warnung ab (%)</label>
+          <input id="warn_percent" type="number" value="80" />
+          <div class="hint">Anzeige wird gelb.</div>
+        </div>
+        <div class="field">
+          <label>Kritisch ab (%)</label>
+          <input id="critical_percent" type="number" value="95" />
+          <div class="hint">Rote Vollbild-Warnung.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Anzeige</h2>
+      <div class="field">
+        <label>Titel</label>
+        <input id="d_title" value="Küche – Netzbezug" />
+      </div>
+      <div class="row">
+        <div class="field"><label>Warntext (gelb)</label><input id="d_warn_text" value="Achtung – Leistung beobachten" /></div>
+        <div class="field"><label>Kritisch-Text (rot)</label><input id="d_critical_text" value="STROM REDUZIEREN!" /></div>
+      </div>
+      <div class="field toggle">
+        <input id="d_show_phases" type="checkbox" />
+        <label style="margin:0">Einzelne Phasen (L1/L2/L3) anzeigen</label>
+      </div>
+      <div class="field">
+        <label>Aktualisierungsintervall (Sekunden)</label>
+        <input id="poll_interval_s" type="number" step="0.5" value="1" />
+      </div>
+    </div>
+
+    <div class="btns">
+      <button class="btn-primary" id="btnSave">Speichern</button>
+      <a href="/" class="btn-ghost" style="text-decoration:none;display:inline-block">Zur Anzeige</a>
+      <span id="saveMsg" class="msg"></span>
+    </div>
+  </div>
+
+  <script src="/static/settings.js"></script>
+</body>
+</html>

@@ -1,0 +1,38 @@
+{
+  "poll_interval_s": 1.0,
+  "modbus": {
+    "profile": "nativ",
+    "host": "192.168.1.50",
+    "port": 503,
+    "unit_id": 1,
+    "function": "input",
+    "datatype": "int32",
+    "byte_order": "big",
+    "word_order": "big",
+    "power_scale": 0.001,
+    "invert_sign": false,
+    "grid_mode": "register",
+    "registers": {
+      "power_total": 2,
+      "production": 0,
+      "power_l1": null,
+      "power_l2": null,
+      "power_l3": null,
+      "current_l1": null,
+      "current_l2": null,
+      "current_l3": null
+    }
+  },
+  "limits": {
+    "max_power_kw": 43,
+    "warn_percent": 80,
+    "critical_percent": 95
+  },
+  "display": {
+    "title": "Küche – Netzbezug",
+    "warn_text": "Achtung – Leistung beobachten",
+    "critical_text": "STROM REDUZIEREN!",
+    "show_phases": false
+  },
+  "channels": []
+}

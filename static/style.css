@@ -46,8 +46,31 @@ body.crit .ring { animation: ringpulse 1s infinite; }
   justify-content: center;
   gap: 1.2vh;
   text-align: center;
-  padding: 4vh 4vw;
+  padding: 4vh 4vw 14vh;   /* unten Platz für die Logo-Fußleiste */
 }
+
+/* ---- Logo-Fußleiste ---- */
+.brandbar {
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  height: 11vh;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 4vw;
+  z-index: 40;
+  border-top: 1px solid #1e293b;
+  background: linear-gradient(to top, rgba(0,0,0,.25), transparent);
+}
+.brand img { display: block; height: 6.5vh; width: auto; }
+.brand.sampl {
+  background: #fff;
+  border-radius: 12px;
+  padding: 0.6vh 1.2vw;
+  display: inline-flex;
+  align-items: center;
+}
+.brand.sampl img { height: 7vh; }
 .title {
   font-size: 3.2vh;
   font-weight: 600;

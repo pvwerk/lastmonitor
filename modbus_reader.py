@@ -1,22 +1,23 @@
 """
 Modbus-TCP-Leser für PLEXLOG PL 100.
 
-Unterstützt zwei Profile (in den Einstellungen umschaltbar):
+Liest in einem Hintergrund-Thread:
+  - Netzbezug (signiert: + = Bezug, − = Einspeisung)
+  - Erzeugung (PV)
+  - beliebig viele Zusatz-Zähler (S0 / Modbus, am Plexlog angeschlossen)
+und berechnet den Gesamtverbrauch (= Netzbezug + Erzeugung).
 
-1) "nativ"   – die native PLEXLOG-Modbus-Schnittstelle (Standard)
-     Port 503, UnitID 1, Input Register (FC4), Datentyp int32, Werte in Watt.
-     Adresse 0 = PV-Erzeugung, Adresse 2 = Verbrauch / Netzbezug.
-     Netzbezug = Verbrauch(Reg 2) − PV(Reg 0); ohne PV reicht Reg 2 direkt.
-     (Registerbelegung aus der produktiv genutzten evcc-Community-Integration,
-      Quelle: github.com/evcc-io/evcc Discussion #11661.)
+Profile (in den Einstellungen umschaltbar):
+  - "nativ"   : Port 503, Input Register (FC4), int32, Watt.
+                Reg 0 = PV-Erzeugung, Reg 2 = Verbrauch/Netzbezug.
+                (Belegung aus produktiv genutzter evcc-Integration,
+                 github.com/evcc-io/evcc Discussion #11661.)
+  - "gateway" : Port 1502, Holding (FC3), float32, MW. Wirkleistung Reg 0,
+                Phasen 2/4/6, Ströme 30/32/34.
 
-2) "gateway" – das OpenGateway-Profil (DynModbusTCP_Profil_26)
-     Port 1502, UnitID 1, Holding Register (FC3), Datentyp float32, Werte in MW.
-     Wirkleistung Reg 0, Phasen Reg 2/4/6, Ströme Reg 30/32/34.
-
-Alle relevanten Parameter (Port, Funktionscode, Datentyp, Register, Skalierung,
-Byte-/Wortreihenfolge) sind über die Konfiguration einstellbar, damit die exakte
-Belegung am Gerät verifiziert/angepasst werden kann.
+Die genauen Register angeschlossener S0-/Modbus-Zähler stehen in der
+Plexlog-Datei „PLOpenGateway_Definitionen.xlsx" (auf Anfrage bei info@plexlog.de)
+bzw. lassen sich mit scan_registers() am Gerät empirisch ermitteln.
 """
 import struct
 import threading
@@ -24,7 +25,7 @@ import time
 
 try:
     from pymodbus.client import ModbusTcpClient
-except Exception:  # pragma: no cover - erst nach pip install vorhanden
+except Exception:  # pragma: no cover
     ModbusTcpClient = None
 
 
@@ -43,37 +44,7 @@ def decode_value(regs, datatype="int32", byte_order="big", word_order="big"):
         return struct.unpack(bo + "f", raw)[0]
     if datatype == "uint32":
         return struct.unpack(bo + "I", raw)[0]
-    # int32 (Standard)
     return struct.unpack(bo + "i", raw)[0]
-
-
-class Reading:
-    """Letzter Messzustand – thread-sicher gelesen/geschrieben."""
-
-    def __init__(self):
-        self._lock = threading.Lock()
-        self._data = {
-            "online": False,
-            "error": "Noch keine Verbindung",
-            "ts": 0,
-            "power_kw": None,        # Netzbezug gesamt (kW)
-            "power_l1_kw": None,
-            "power_l2_kw": None,
-            "power_l3_kw": None,
-            "current_l1_a": None,
-            "current_l2_a": None,
-            "current_l3_a": None,
-            "channels": [],
-        }
-
-    def update(self, **kwargs):
-        with self._lock:
-            self._data.update(kwargs)
-            self._data["ts"] = time.time()
-
-    def snapshot(self):
-        with self._lock:
-            return dict(self._data)
 
 
 def read_register(client, function, datatype, address, unit, byte_order, word_order):
@@ -90,6 +61,33 @@ def read_register(client, function, datatype, address, unit, byte_order, word_or
     return decode_value(rr.registers, datatype, byte_order, word_order)
 
 
+class Reading:
+    """Letzter Messzustand – thread-sicher gelesen/geschrieben."""
+
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._data = {
+            "online": False,
+            "error": "Noch keine Verbindung",
+            "ts": 0,
+            "power_kw": None,          # Netzbezug, signiert (+ Bezug / − Einspeisung)
+            "production_kw": None,     # Erzeugung (PV), Summe
+            "consumption_kw": None,    # Gesamtverbrauch = Netzbezug + Erzeugung
+            "meters": [],              # [{name, type, kw}]
+            "power_l1_kw": None, "power_l2_kw": None, "power_l3_kw": None,
+            "current_l1_a": None, "current_l2_a": None, "current_l3_a": None,
+        }
+
+    def update(self, **kwargs):
+        with self._lock:
+            self._data.update(kwargs)
+            self._data["ts"] = time.time()
+
+    def snapshot(self):
+        with self._lock:
+            return dict(self._data)
+
+
 def compute_grid_power(client, mb, unit):
     """Netzbezug (in der Geräte-Einheit, vor Skalierung) ermitteln."""
     function = mb.get("function", "input")
@@ -102,14 +100,52 @@ def compute_grid_power(client, mb, unit):
         return read_register(client, function, datatype, addr, unit, bo, wo)
 
     if mb.get("grid_mode") == "calc":
-        # Netzbezug = Verbrauch − PV-Erzeugung
         consumption = rd(reg.get("power_total", 2))
         production = rd(reg.get("production", 0))
         if consumption is None:
             return None
         return consumption - (production or 0)
-    # Einzelregister (z. B. nativ Reg 2 = Verbrauch, oder Gateway Reg 0)
     return rd(reg.get("power_total", 2))
+
+
+def scan_registers(mb, unit, start, count, function=None):
+    """Liest einen Registerbereich und gibt je Adresse die dekodierten Werte
+    (int32 + float32) zurück – zum empirischen Auffinden von Zähler-Registern.
+    Liest paarweise (32-bit), Adressschritt 2."""
+    if ModbusTcpClient is None:
+        raise RuntimeError("pymodbus nicht installiert")
+    host = (mb.get("host") or "").strip()
+    port = int(mb.get("port", 503))
+    function = function or mb.get("function", "input")
+    bo = mb.get("byte_order", "big")
+    wo = mb.get("word_order", "big")
+    client = ModbusTcpClient(host=host, port=port, timeout=3)
+    out = []
+    try:
+        if not client.connect():
+            raise IOError(f"Verbindung zu {host}:{port} fehlgeschlagen")
+        addr = int(start)
+        end = int(start) + int(count) * 2
+        while addr < end:
+            row = {"address": addr}
+            try:
+                if function == "holding":
+                    rr = client.read_holding_registers(address=addr, count=2, slave=unit)
+                else:
+                    rr = client.read_input_registers(address=addr, count=2, slave=unit)
+                if rr is None or rr.isError():
+                    row["error"] = str(rr)
+                else:
+                    row["int32"] = decode_value(rr.registers, "int32", bo, wo)
+                    row["float32"] = round(decode_value(rr.registers, "float32", bo, wo), 4)
+                    row["raw"] = list(rr.registers)
+            except Exception as e:
+                row["error"] = str(e)
+            out.append(row)
+            addr += 2
+    finally:
+        client.close()
+    return out
 
 
 class ModbusPoller(threading.Thread):
@@ -168,42 +204,59 @@ class ModbusPoller(threading.Thread):
                 if not client.connect():
                     raise IOError(f"Verbindung zu {host}:{port} fehlgeschlagen")
 
-                def rd(addr):
-                    return read_register(client, function, datatype, addr, unit, bo, wo)
+                def rd(addr, fn=None, dt=None):
+                    return read_register(client, fn or function, dt or datatype, addr, unit, bo, wo)
 
+                # Netzbezug (signiert)
                 grid_raw = compute_grid_power(client, mb, unit)
                 power_kw = None if grid_raw is None else sgn * grid_raw * scale
 
-                # Phasen/Ströme nur, wenn Register hinterlegt sind (nativ: keine)
-                p1 = rd(reg.get("power_l1")) if reg.get("power_l1") is not None else None
-                p2 = rd(reg.get("power_l2")) if reg.get("power_l2") is not None else None
-                p3 = rd(reg.get("power_l3")) if reg.get("power_l3") is not None else None
-                i1 = rd(reg.get("current_l1")) if reg.get("current_l1") is not None else None
-                i2 = rd(reg.get("current_l2")) if reg.get("current_l2") is not None else None
-                i3 = rd(reg.get("current_l3")) if reg.get("current_l3") is not None else None
+                # Erzeugung (PV)
+                prod_addr = reg.get("production", 0)
+                prod_raw = rd(prod_addr) if prod_addr is not None else None
+                production_kw = None if prod_raw is None else abs(prod_raw) * scale
 
-                channels = []
-                for ch in cfg.get("channels", []) or []:
+                # Gesamtverbrauch = Netzbezug + Erzeugung
+                if power_kw is None:
+                    consumption_kw = None
+                else:
+                    consumption_kw = power_kw + (production_kw or 0)
+
+                # Zusatz-Zähler
+                meters = []
+                for m in cfg.get("meters", []) or []:
+                    m_reg = m.get("register")
+                    if m_reg is None:
+                        meters.append({"name": m.get("name", "Zähler"), "type": m.get("type", "modbus"),
+                                       "kw": None, "error": "kein Register"})
+                        continue
                     try:
-                        val = rd(ch.get("register"))
-                        ch_scale = float(ch.get("scale", 1.0))
-                        channels.append({
-                            "name": ch.get("name", f"Reg {ch.get('register')}"),
-                            "unit": ch.get("unit", ""),
-                            "value": None if val is None else val * ch_scale,
-                        })
-                    except Exception as ce:
-                        channels.append({"name": ch.get("name", "?"), "unit": ch.get("unit", ""),
-                                         "value": None, "error": str(ce)})
+                        m_dt = m.get("datatype", datatype)
+                        m_fn = m.get("function", function)
+                        m_scale = float(m.get("scale", scale))
+                        val = rd(m_reg, fn=m_fn, dt=m_dt)
+                        meters.append({"name": m.get("name") or f"Reg {m_reg}",
+                                       "type": m.get("type", "modbus"),
+                                       "kw": None if val is None else val * m_scale})
+                    except Exception as me:
+                        meters.append({"name": m.get("name", "Zähler"), "type": m.get("type", "modbus"),
+                                       "kw": None, "error": str(me)})
+
+                # Phasen/Ströme (nur Gateway-Profil; native Register sind None)
+                def rdopt(key):
+                    a = reg.get(key)
+                    return rd(a) if a is not None else None
+                p1, p2, p3 = rdopt("power_l1"), rdopt("power_l2"), rdopt("power_l3")
+                i1, i2, i3 = rdopt("current_l1"), rdopt("current_l2"), rdopt("current_l3")
 
                 self.reading.update(
                     online=True, error=None,
-                    power_kw=power_kw,
+                    power_kw=power_kw, production_kw=production_kw, consumption_kw=consumption_kw,
+                    meters=meters,
                     power_l1_kw=None if p1 is None else sgn * p1 * scale,
                     power_l2_kw=None if p2 is None else sgn * p2 * scale,
                     power_l3_kw=None if p3 is None else sgn * p3 * scale,
                     current_l1_a=i1, current_l2_a=i2, current_l3_a=i3,
-                    channels=channels,
                 )
             except Exception as e:
                 self.reading.update(online=False, error=str(e))

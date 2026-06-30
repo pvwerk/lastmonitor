@@ -10,34 +10,53 @@
   <!-- Farbiger Rand-Ring rund um den Bildschirm -->
   <div id="ring" class="ring"></div>
 
-  <main id="main" class="screen level-offline">
-    <div class="title" id="title">Küche – Netzbezug</div>
+  <main id="main" class="layout level-offline">
 
-    <!-- Tacho -->
-    <div class="gauge-wrap">
-      <svg viewBox="0 0 200 120" class="gauge" preserveAspectRatio="xMidYMid meet">
-        <path class="gauge-bg" d="M10 110 A 90 90 0 0 1 190 110" />
-        <path id="gaugeFill" class="gauge-fill" d="M10 110 A 90 90 0 0 1 190 110" />
-        <line id="needle" class="needle" x1="100" y1="110" x2="100" y2="48" />
-        <circle cx="100" cy="110" r="6" class="needle-hub" />
-      </svg>
-      <div class="gauge-center">
-        <div class="power" id="power">–</div>
-        <div class="power-unit">kW</div>
+    <!-- LINKE HÄLFTE: Netzbezug -->
+    <section class="netz">
+      <div class="block-title" id="title">Netzbezug</div>
+      <div class="gauge-wrap">
+        <svg viewBox="0 0 200 120" class="gauge" preserveAspectRatio="xMidYMid meet">
+          <path class="gauge-bg" d="M10 110 A 90 90 0 0 1 190 110" />
+          <path id="gaugeFill" class="gauge-fill" d="M10 110 A 90 90 0 0 1 190 110" />
+          <line id="needle" class="needle" x1="100" y1="110" x2="100" y2="48" />
+          <circle cx="100" cy="110" r="6" class="needle-hub" />
+        </svg>
+        <div class="gauge-center">
+          <div class="power" id="power">–</div>
+          <div class="power-unit">kW</div>
+        </div>
       </div>
-    </div>
+      <div class="pct-row">
+        <span id="pct" class="pct">– %</span>
+        <span class="pct-label">der Anschlussleistung (<span id="maxkw">–</span> kW)</span>
+      </div>
+      <!-- Gesamtverbrauch + Richtungsstatus -->
+      <div class="totalbox">
+        <div class="total-line">
+          <span class="total-label">Gesamtverbrauch</span>
+          <span class="total-val" id="total">– kW</span>
+        </div>
+        <div class="dir" id="dir"><span class="dot"></span><span id="dirText">–</span></div>
+      </div>
+      <div class="status" id="status">Verbinde …</div>
+    </section>
 
-    <!-- Auslastung -->
-    <div class="pct-row">
-      <span id="pct" class="pct">– %</span>
-      <span class="pct-label">der Anschlussleistung (<span id="maxkw">–</span> kW)</span>
-    </div>
+    <!-- RECHTS OBEN: Erzeugung -->
+    <section class="erzeugung">
+      <div class="block-title">Erzeugung (PV)</div>
+      <div class="big-metric">
+        <span class="big-val" id="prod">–</span><span class="big-unit">kW</span>
+      </div>
+    </section>
 
-    <!-- Phasen -->
-    <div class="phases" id="phases"></div>
-
-    <!-- Status / Fehler -->
-    <div class="status" id="status">Verbinde …</div>
+    <!-- RECHTS UNTEN: weitere Zähler -->
+    <section class="meters">
+      <div class="block-title">Zähler</div>
+      <div class="meter-list" id="meterList">
+        <div class="meter-empty">Keine Zähler konfiguriert</div>
+      </div>
+    </section>
   </main>
 
   <!-- Logo-Fußleiste -->

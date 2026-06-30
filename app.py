@@ -22,7 +22,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-from modbus_reader import Reading, ModbusPoller, compute_grid_power
+from modbus_reader import Reading, ModbusPoller, compute_grid_power, scan_registers
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PATH = os.path.join(BASE_DIR, "config.json")
@@ -69,15 +69,18 @@ def compute_status(snapshot, cfg):
     state = {
         "online": online,
         "error": snapshot.get("error"),
-        "power_kw": power,
+        "power_kw": power,                              # Netzbezug, signiert
+        "production_kw": snapshot.get("production_kw"), # Erzeugung (PV)
+        "consumption_kw": snapshot.get("consumption_kw"), # Gesamtverbrauch
+        "direction": None,                              # bezug | einspeisung
         "max_power_kw": max_kw,
         "warn_percent": warn_pct,
         "critical_percent": crit_pct,
         "percent": None,
         "level": "offline",        # offline | ok | warn | critical
+        "meters": snapshot.get("meters", []),
         "phases_kw": [snapshot.get("power_l1_kw"), snapshot.get("power_l2_kw"), snapshot.get("power_l3_kw")],
         "currents_a": [snapshot.get("current_l1_a"), snapshot.get("current_l2_a"), snapshot.get("current_l3_a")],
-        "channels": snapshot.get("channels", []),
         "ts": snapshot.get("ts"),
         "stale": (time.time() - (snapshot.get("ts") or 0)) > 10,
     }
@@ -85,7 +88,10 @@ def compute_status(snapshot, cfg):
     if not online or power is None:
         return state
 
-    # Nur Bezug ist relevant: negative Werte (Einspeisung) = 0 % Last
+    # Richtung: + = Bezug aus dem Netz, − = Einspeisung
+    state["direction"] = "einspeisung" if power < -0.01 else "bezug"
+
+    # Auslastung des Netzanschlusses: nur Bezug zählt (Einspeisung = 0 %)
     bezug = max(0.0, power)
     pct = (bezug / max_kw * 100.0) if max_kw > 0 else 0.0
     state["percent"] = round(pct, 1)
@@ -195,6 +201,33 @@ async def api_test(request: Request):
         return JSONResponse({"ok": False, "error": str(e)})
     finally:
         client.close()
+
+
+@app.post("/api/scan")
+async def api_scan(request: Request):
+    """Liest einen Registerbereich am Gerät (zum Auffinden von Zähler-Registern)."""
+    body = {}
+    try:
+        body = await request.json()
+    except Exception:
+        pass
+    mb = (body.get("modbus") if isinstance(body, dict) else None) or get_config().get("modbus", {})
+    unit = int(mb.get("unit_id", 1))
+    start = int(body.get("start", 0))
+    count = int(body.get("count", 20))           # Anzahl 32-bit-Werte
+    function = body.get("function")               # optional override
+    count = max(1, min(count, 64))                # Sicherheitslimit
+    if not (mb.get("host") or "").strip():
+        return JSONResponse({"ok": False, "error": "Keine IP-Adresse angegeben"}, status_code=400)
+    try:
+        rows = scan_registers(mb, unit, start, count, function=function)
+        scale = float(mb.get("power_scale", 0.001))
+        for r in rows:
+            if "int32" in r:
+                r["kw_int32"] = round(r["int32"] * scale, 3)
+        return JSONResponse({"ok": True, "rows": rows, "scale": scale})
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": str(e)})
 
 
 # Statische Assets (CSS/JS)

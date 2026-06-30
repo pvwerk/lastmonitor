@@ -218,6 +218,17 @@ button { border: none; border-radius: 10px; padding: 12px 20px; font-size: 15px;
 .meter-row .mr-title { font-weight: 700; }
 .btn-del { background: #3b1320; color: #fca5a5; }
 
+/* Version / Update */
+.vrow { display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  border: 1px solid #243049; border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; background: #0e1729; }
+.vrow .vmeta { font-size: 13px; }
+.vrow .vmeta .vsubj { color: var(--fg); }
+.vrow .vmeta .vdate { color: var(--muted); font-size: 12px; }
+.vrow.current { border-color: #2563eb; }
+.vbadge { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 20px; }
+.vbadge.cur { background: #15315e; color: #93c5fd; }
+.vbadge.upd { background: #1e3a1e; color: #86efac; }
+
 /* Scanner-Tabelle */
 .scan-table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 13px; }
 .scan-table th, .scan-table td { border: 1px solid #243049; padding: 6px 8px; text-align: right; }

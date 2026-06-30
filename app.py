@@ -15,6 +15,8 @@ API:
 """
 import json
 import os
+import sys
+import subprocess
 import threading
 import time
 
@@ -288,6 +290,118 @@ async def api_scan(request: Request):
         return JSONResponse({"ok": True, "rows": rows, "scale": scale})
     except Exception as e:
         return JSONResponse({"ok": False, "error": str(e)})
+
+
+# ---------------------------------------------------------------------------
+# Software-Version / Update / Downgrade (über GitHub)
+# ---------------------------------------------------------------------------
+def _git(args, timeout=120):
+    try:
+        return subprocess.run(["git"] + args, cwd=BASE_DIR, capture_output=True, text=True, timeout=timeout)
+    except Exception as e:
+        r = subprocess.CompletedProcess(args, 1, "", str(e))
+        return r
+
+
+def _current_branch():
+    r = _git(["rev-parse", "--abbrev-ref", "HEAD"])
+    b = (r.stdout or "").strip()
+    return b if b and b != "HEAD" else "main"
+
+
+def current_version():
+    r = _git(["log", "-1", "--format=%h|%ci|%s"])
+    if r.returncode != 0 or not r.stdout.strip():
+        return {"hash": None, "date": None, "subject": "unbekannt", "error": (r.stderr or "").strip()}
+    h, date, subj = r.stdout.strip().split("|", 2)
+    return {"hash": h, "date": date[:16], "subject": subj, "branch": _current_branch()}
+
+
+def _recent_versions(n=6):
+    branch = _current_branch()
+    _git(["fetch", "--quiet", "origin"], timeout=30)
+    # Versionshistorie vom Remote (zeigt immer die neuesten, egal welcher Stand lokal ausgecheckt ist)
+    r = _git(["log", "-n", str(n), "--format=%h|%ci|%s", "origin/" + branch])
+    if r.returncode != 0:
+        r = _git(["log", "-n", str(n), "--format=%h|%ci|%s"])
+    out = []
+    for line in (r.stdout or "").strip().splitlines():
+        try:
+            h, date, subj = line.split("|", 2)
+            out.append({"hash": h, "date": date[:16], "subject": subj})
+        except ValueError:
+            pass
+    return out
+
+
+def _pip_install():
+    try:
+        subprocess.run([sys.executable, "-m", "pip", "install", "-q", "-r",
+                        os.path.join(BASE_DIR, "requirements.txt")],
+                       cwd=BASE_DIR, capture_output=True, text=True, timeout=300)
+    except Exception:
+        pass
+
+
+def _restart_later(delay=1.5):
+    """Prozess nach kurzer Verzögerung neu starten (lädt den neuen Code).
+    Re-exec funktioniert direkt; unter systemd sorgt Restart=always zusätzlich."""
+    def go():
+        time.sleep(delay)
+        try:
+            os.execv(sys.argv[0], sys.argv)
+        except Exception:
+            os._exit(0)  # Fallback: beenden -> systemd/Wrapper startet neu
+    threading.Thread(target=go, daemon=True).start()
+
+
+@app.get("/api/version")
+def api_version():
+    cur = current_version()
+    branch = cur.get("branch") or "main"
+    _git(["fetch", "--quiet", "origin"], timeout=30)
+    behind = _git(["rev-list", "--count", "HEAD..origin/" + branch]).stdout.strip() or "0"
+    cur["behind"] = behind
+    cur["updates_available"] = behind not in ("", "0")
+    return JSONResponse(cur)
+
+
+@app.get("/api/versions")
+def api_versions():
+    return JSONResponse({"current": current_version().get("hash"), "versions": _recent_versions(6)})
+
+
+@app.post("/api/update")
+def api_update():
+    branch = _current_branch()
+    _git(["fetch", "origin"], timeout=60)
+    r = _git(["reset", "--hard", "origin/" + branch])
+    if r.returncode != 0:
+        return JSONResponse({"ok": False, "error": (r.stderr or "git-Fehler").strip()}, status_code=500)
+    _pip_install()
+    ver = current_version()
+    _restart_later()
+    return JSONResponse({"ok": True, "message": "Update eingespielt – Neustart läuft.", "version": ver})
+
+
+@app.post("/api/rollback")
+async def api_rollback(request: Request):
+    body = {}
+    try:
+        body = await request.json()
+    except Exception:
+        pass
+    h = (body.get("hash") if isinstance(body, dict) else None) or ""
+    # Sicherheit: nur Hashes aus der jüngeren Historie zulassen
+    allowed = {v["hash"] for v in _recent_versions(20)}
+    if h not in allowed:
+        return JSONResponse({"ok": False, "error": "Unbekannte Version."}, status_code=400)
+    r = _git(["reset", "--hard", h])
+    if r.returncode != 0:
+        return JSONResponse({"ok": False, "error": (r.stderr or "git-Fehler").strip()}, status_code=500)
+    _pip_install()
+    _restart_later()
+    return JSONResponse({"ok": True, "message": "Auf Version " + h + " zurückgesetzt – Neustart läuft."})
 
 
 # Statische Assets (CSS/JS)

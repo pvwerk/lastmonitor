@@ -29,35 +29,42 @@ sudo reboot
 ```
 Nach dem Neustart startet die Anzeige automatisch im Vollbild.
 
-## PLEXLOG vorbereiten
-Die native Modbus-TCP-Schnittstelle muss aktiv sein:
-- **Port 503**, **UnitID 1**, **Input Register (FC4)**, Datentyp **int32**, Einheit **Watt**.
-- **Register 0** = PV-Erzeugung, **Register 2** = Verbrauch / Netzbezug.
-- Ohne PV-Anlage (typische Küche) liefert **Register 2** direkt den Netzbezug.
+## PLEXLOG vorbereiten (OpenGateway)
+Im Plexlog muss das **OpenGateway** aktiv sein (Einstellungen → OpenGateway):
+- **Port 503**, **Modbus TCP**, **Input Register (FC4)**, Datentyp **Signed int32**, Einheit **Watt**.
+- Werte aktualisieren sich im Plexlog nur **alle ~15 s**.
 
-> Quelle der Registerbelegung: produktiv genutzte evcc-Community-Integration
-> (github.com/evcc-io/evcc, Discussion #11661). Die offizielle Modbus-/Excel-Doku
-> gibt es auf Anfrage bei Plexlog (info@plexlog.de). Mit dem **„Verbindung testen"**-
-> Knopf in den Einstellungen lässt sich der gelesene Wert sofort am Gerät prüfen
-> (z. B. einen Verbraucher einschalten und zusehen, wie der Wert steigt).
+Wichtigste Register (verifiziert, Doku „PLOpenGateway_Definitionen.xlsx"):
+| Register | Bedeutung |
+|---|---|
+| 0/1 | Wirkleistung AC = **Erzeugung (PV)** |
+| 2/3 | **Verbrauch Momentan** = Gesamtverbrauch |
+| 19/20 | **Netzanalysegerät (Janitza)** = exakter Netzbezug (empfohlen) |
+| 4 / 6 | Tagesertrag / Tagesverbrauch (Wh) |
+| 8(+10) / 11(+13) | Gesamtertrag / Gesamtverbrauch (Wh, mit Exponent) |
+| 36 / 37–38 | Batterie SOC % / Leistung |
 
-Alternativ ist das **OpenGateway-Profil** wählbar (Port 1502, Holding/Float/MW,
-mit Phasen) – in den Einstellungen per Profil umschaltbar.
+> **Netzbezug-Quelle:** am genauesten ist **Reg 19/20 (Netzanalysegerät)** – rechnet
+> Batterie/PV korrekt heraus. Ohne Analysegerät: „Verbrauch − Erzeugung" (nur ohne Batterie korrekt).
+> Hinweis: Einzelne angeschlossene Zähler gibt der Plexlog über Modbus **nicht** einzeln aus – nur Summen.
 
 ## Einstellungen (`/settings`)
-- **Profil**: „PLEXLOG nativ" (Standard) oder „OpenGateway".
-- **IP-Adresse**, Port, UnitID, Funktionscode, Datentyp, Skalierung.
-- **Netzbezug ermitteln**: direkt aus einem Register, oder „Verbrauch − PV".
+- **Software-Version & Update**: aktuelle Version, Knopf „Aktualisieren" (holt neueste Version aus GitHub),
+  und Zurückwechseln auf eine frühere Version.
+- **Verbindung**: IP-Adresse, Port, UnitID, Funktionscode, Datentyp, Skalierung. Knopf „Verbindung testen".
+- **Netzbezug ermitteln**: Netzanalysegerät (Reg 19/20) / Verbrauch − PV / direktes Register.
 - **Grenzwerte**: maximale Anschlussleistung (kW), Warn-% (gelb), Kritisch-% (rot).
   - Tipp Anschlussleistung: Absicherung (A) × 3 × 230 V ÷ 1000.
-- **Anzeige**: Titel, Warntexte, Phasen ein/aus, Aktualisierungsintervall.
+- **Energie**: Tagesertrag/-verbrauch + Woche/Monat (aus dem Gesamtzähler berechnet).
+- **Anzeige**: Titel, Warntexte, Aktualisierungsintervall.
 
 ## Updates einspielen
-Auf dem Pi:
+**Am einfachsten:** in den Einstellungen (`/settings`) den Knopf **„Auf neueste Version aktualisieren"**.
+Alternativ auf dem Pi:
 ```bash
 cd lastmonitor && bash deploy/update.sh
 ```
-Holt den neuesten Stand aus GitHub und startet den Dienst neu.
+Beides holt den neuesten Stand aus GitHub und startet die Anzeige neu.
 
 ## Lokal entwickeln / testen (Mac/PC)
 ```bash

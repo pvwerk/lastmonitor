@@ -13,6 +13,19 @@
       <a href="/" style="color:#60a5fa">→ Zur Anzeige</a></p>
 
     <div class="card">
+      <h2>Software-Version &amp; Update</h2>
+      <div id="versionInfo" class="hint">Version wird geladen …</div>
+      <div class="btns" style="margin-top:10px">
+        <button class="btn-primary" id="btnUpdate">Auf neueste Version aktualisieren</button>
+        <span id="updateMsg" class="msg"></span>
+      </div>
+      <div style="margin-top:16px">
+        <label style="display:block;font-size:13px;color:var(--muted);margin-bottom:6px">Frühere Version (zurückwechseln):</label>
+        <div id="versionList" class="hint">…</div>
+      </div>
+    </div>
+
+    <div class="card">
       <h2>Verbindung zum PLEXLOG (Modbus TCP)</h2>
       <div class="field">
         <label>Profil</label>

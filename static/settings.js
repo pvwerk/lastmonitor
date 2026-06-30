@@ -238,4 +238,83 @@ $("scanAuto").addEventListener("change", () => {
   else if (scanTimer) { clearInterval(scanTimer); scanTimer = null; }
 });
 
+// ---- Software-Version / Update / Downgrade ---------------------------------
+let _currentHash = null;
+
+async function loadVersion() {
+  try {
+    const v = await (await fetch("/api/version", { cache: "no-store" })).json();
+    _currentHash = v.hash;
+    $("versionInfo").innerHTML = v.hash
+      ? `Aktuelle Version: <b>${esc(v.hash)}</b> &nbsp;·&nbsp; ${esc(v.date || "")}<br><span style="color:#93c5fd">${esc(v.subject || "")}</span>`
+      : "Version unbekannt (kein Git-Repo).";
+    if (v.updates_available) {
+      $("updateMsg").textContent = `Update verfügbar (${v.behind} neuer)`;
+      $("updateMsg").className = "msg ok";
+    } else {
+      $("updateMsg").textContent = "Aktuell – kein Update nötig";
+      $("updateMsg").className = "msg";
+    }
+  } catch (e) {
+    $("versionInfo").textContent = "Version konnte nicht geladen werden.";
+  }
+}
+
+async function loadVersions() {
+  try {
+    const data = await (await fetch("/api/versions", { cache: "no-store" })).json();
+    const cur = data.current;
+    const rows = (data.versions || []).map((v, i) => {
+      const isCur = v.hash === cur;
+      const right = isCur
+        ? `<span class="vbadge cur">aktuell</span>`
+        : `<button class="btn-ghost btn-small" onclick="rollbackTo('${esc(v.hash)}')">Auf diese Version</button>`;
+      return `<div class="vrow ${isCur ? "current" : ""}">
+        <div class="vmeta"><div class="vsubj">${esc(v.subject)}</div>
+          <div class="vdate">${esc(v.hash)} · ${esc(v.date)}</div></div>
+        ${right}</div>`;
+    }).join("");
+    $("versionList").innerHTML = rows || "Keine Historie verfügbar.";
+  } catch (e) {
+    $("versionList").textContent = "Historie konnte nicht geladen werden.";
+  }
+}
+
+function waitAndReload(msgId) {
+  setMsg(msgId, "Neustart läuft – Seite lädt automatisch neu …", true);
+  let tries = 0;
+  setTimeout(() => {
+    const t = setInterval(async () => {
+      tries++;
+      try {
+        const r = await fetch("/api/version", { cache: "no-store" });
+        if (r.ok) { clearInterval(t); location.reload(); return; }
+      } catch (e) { /* Server noch im Neustart */ }
+      if (tries > 20) { clearInterval(t); location.reload(); }
+    }, 1500);
+  }, 4000);
+}
+
+$("btnUpdate").addEventListener("click", async () => {
+  if (!confirm("Auf die neueste Version aktualisieren? Die Anzeige startet dabei kurz neu.")) return;
+  setMsg("updateMsg", "Update wird eingespielt …", true);
+  try {
+    const res = await (await fetch("/api/update", { method: "POST" })).json();
+    if (res.ok) waitAndReload("updateMsg");
+    else setMsg("updateMsg", "✗ " + (res.error || "Fehler"), false);
+  } catch (e) { setMsg("updateMsg", "✗ " + e, false); }
+});
+
+window.rollbackTo = async function (hash) {
+  if (!confirm("Auf Version " + hash + " zurückwechseln? Die Anzeige startet dabei kurz neu.")) return;
+  setMsg("updateMsg", "Wechsle auf " + hash + " …", true);
+  try {
+    const res = await (await fetch("/api/rollback", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ hash }) })).json();
+    if (res.ok) waitAndReload("updateMsg");
+    else setMsg("updateMsg", "✗ " + (res.error || "Fehler"), false);
+  } catch (e) { setMsg("updateMsg", "✗ " + e, false); }
+};
+
 load();
+loadVersion();
+loadVersions();

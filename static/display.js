@@ -13,6 +13,12 @@ const el = {
   dir: document.getElementById("dir"),
   dirText: document.getElementById("dirText"),
   prod: document.getElementById("prod"),
+  dayErtrag: document.getElementById("dayErtrag"),
+  dayVerbrauch: document.getElementById("dayVerbrauch"),
+  weekErtrag: document.getElementById("weekErtrag"),
+  weekVerbrauch: document.getElementById("weekVerbrauch"),
+  monthErtrag: document.getElementById("monthErtrag"),
+  monthVerbrauch: document.getElementById("monthVerbrauch"),
   meterList: document.getElementById("meterList"),
   status: document.getElementById("status"),
   gaugeFill: document.getElementById("gaugeFill"),
@@ -66,10 +72,19 @@ function render(state) {
   el.prod.textContent = (state.production_kw === null || state.production_kw === undefined)
     ? "–" : fmt(Math.max(0, state.production_kw), 1);
 
-  // Zähler
+  // Energie (Tag / Woche / Monat)
+  const kwh = (v) => (v === null || v === undefined) ? "– kWh" : fmt(v, 1) + " kWh";
+  el.dayErtrag.textContent = kwh(state.tagesertrag_kwh);
+  el.dayVerbrauch.textContent = kwh(state.tagesverbrauch_kwh);
+  el.weekErtrag.textContent = kwh(state.week_ertrag);
+  el.weekVerbrauch.textContent = kwh(state.week_verbrauch);
+  el.monthErtrag.textContent = kwh(state.month_ertrag);
+  el.monthVerbrauch.textContent = kwh(state.month_verbrauch);
+
+  // Optionale Zusatz-Zähler
   const meters = state.meters || [];
   if (!meters.length) {
-    el.meterList.innerHTML = `<div class="meter-empty">Keine Zähler konfiguriert</div>`;
+    el.meterList.innerHTML = "";
   } else {
     el.meterList.innerHTML = meters.map(m => {
       if (m.error) {
@@ -167,7 +182,11 @@ function demoState(level) {
     direction: d.dir,
     production_kw: d.prod,
     consumption_kw: d.grid + d.prod,
-    meters: demoMeters, ts: 0,
+    meters: [],
+    tagesertrag_kwh: 36.8, tagesverbrauch_kwh: 24.3,
+    week_ertrag: 184.2, week_verbrauch: 142.7,
+    month_ertrag: 612.5, month_verbrauch: 488.1,
+    ts: 0,
   };
 }
 

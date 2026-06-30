@@ -4,8 +4,10 @@ const $ = (id) => document.getElementById(id);
 const PROFILES = {
   nativ: {
     port: 503, function: "input", datatype: "int32", power_scale: 0.001,
-    byte_order: "big", word_order: "big",
-    registers: { power_total: 2, production: 0, power_l1: null, power_l2: null, power_l3: null, current_l1: null, current_l2: null, current_l3: null },
+    byte_order: "big", word_order: "big", grid_mode: "analyzer",
+    registers: { power_total: 2, production: 0, analyzer: 19,
+      tagesertrag: 4, tagesverbrauch: 6, gesamtertrag: 8, gesamtertrag_exp: 10, gesamtverbrauch: 11, gesamtverbrauch_exp: 13,
+      power_l1: null, power_l2: null, power_l3: null, current_l1: null, current_l2: null, current_l3: null },
   },
   gateway: {
     port: 1502, function: "holding", datatype: "float32", power_scale: 1000,
@@ -80,7 +82,21 @@ function collectMeters() {
 }
 
 // ---- Konfiguration sammeln / anwenden --------------------------------------
+let _loadedRegisters = {};   // bewahrt Register, die nicht im UI stehen (Energie etc.)
+
 function collect() {
+  // Energie-/Sonderregister aus der geladenen Konfig erhalten, UI-Felder drüberlegen
+  const registers = Object.assign({}, _loadedRegisters, {
+    power_total: intOrNull($("r_power_total").value) ?? 2,
+    production: intOrNull($("r_production").value),
+    analyzer: intOrNull($("r_analyzer").value) ?? 19,
+    power_l1: intOrNull($("r_power_l1").value),
+    power_l2: intOrNull($("r_power_l2").value),
+    power_l3: intOrNull($("r_power_l3").value),
+    current_l1: intOrNull($("r_current_l1").value),
+    current_l2: intOrNull($("r_current_l2").value),
+    current_l3: intOrNull($("r_current_l3").value),
+  });
   return {
     poll_interval_s: parseFloat($("poll_interval_s").value) || 1,
     modbus: {
@@ -95,16 +111,7 @@ function collect() {
       power_scale: parseFloat($("power_scale").value) || 0.001,
       invert_sign: $("invert_sign").checked,
       grid_mode: $("grid_mode").value,
-      registers: {
-        power_total: intOrNull($("r_power_total").value) ?? 2,
-        production: intOrNull($("r_production").value),
-        power_l1: intOrNull($("r_power_l1").value),
-        power_l2: intOrNull($("r_power_l2").value),
-        power_l3: intOrNull($("r_power_l3").value),
-        current_l1: intOrNull($("r_current_l1").value),
-        current_l2: intOrNull($("r_current_l2").value),
-        current_l3: intOrNull($("r_current_l3").value),
-      },
+      registers,
     },
     meters: collectMeters(),
     limits: {
@@ -122,6 +129,7 @@ function collect() {
 
 function apply(cfg) {
   const m = cfg.modbus || {}, r = m.registers || {}, l = cfg.limits || {}, d = cfg.display || {};
+  _loadedRegisters = Object.assign({}, r);
   $("profile").value = m.profile || "nativ";
   $("host").value = m.host || "";
   $("port").value = m.port ?? 503;
@@ -132,7 +140,8 @@ function apply(cfg) {
   $("word_order").value = m.word_order || "big";
   $("power_scale").value = m.power_scale ?? 0.001;
   $("invert_sign").checked = !!m.invert_sign;
-  $("grid_mode").value = m.grid_mode || "register";
+  $("grid_mode").value = m.grid_mode || "analyzer";
+  setReg("r_analyzer", r.analyzer ?? 19);
   setReg("r_power_total", r.power_total ?? 2);
   setReg("r_production", r.production ?? 0);
   setReg("r_power_l1", r.power_l1); setReg("r_power_l2", r.power_l2); setReg("r_power_l3", r.power_l3);
@@ -151,8 +160,11 @@ function apply(cfg) {
 function applyProfile(name) {
   const p = PROFILES[name];
   if (!p) return;
+  _loadedRegisters = Object.assign({}, _loadedRegisters, p.registers); // Energie-Register übernehmen
   $("port").value = p.port; $("function").value = p.function; $("datatype").value = p.datatype;
   $("power_scale").value = p.power_scale; $("byte_order").value = p.byte_order; $("word_order").value = p.word_order;
+  if (p.grid_mode) $("grid_mode").value = p.grid_mode;
+  setReg("r_analyzer", p.registers.analyzer ?? 19);
   setReg("r_power_total", p.registers.power_total); setReg("r_production", p.registers.production);
   setReg("r_power_l1", p.registers.power_l1); setReg("r_power_l2", p.registers.power_l2); setReg("r_power_l3", p.registers.power_l3);
   setReg("r_current_l1", p.registers.current_l1); setReg("r_current_l2", p.registers.current_l2); setReg("r_current_l3", p.registers.current_l3);
@@ -160,6 +172,9 @@ function applyProfile(name) {
 }
 function updateVisibility() {
   $("phaseCard").style.display = $("profile").value === "gateway" ? "" : "none";
+  const mode = $("grid_mode").value;
+  $("analyzerField").style.display = mode === "analyzer" ? "" : "none";
+  $("totalField").style.display = mode === "analyzer" ? "none" : "";
 }
 
 // ---- Laden / Speichern / Test ----------------------------------------------
@@ -169,6 +184,7 @@ async function load() {
 }
 
 $("profile").addEventListener("change", () => applyProfile($("profile").value));
+$("grid_mode").addEventListener("change", updateVisibility);
 $("btnAddMeter").addEventListener("click", () => addMeter({ type: "modbus" }));
 
 $("btnSave").addEventListener("click", async () => {

@@ -1,5 +1,6 @@
 venv/
 config.json
+energy_baselines.json
 __pycache__/
 *.pyc
 .DS_Store

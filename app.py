@@ -24,10 +24,13 @@ from fastapi.staticfiles import StaticFiles
 
 from modbus_reader import Reading, ModbusPoller, compute_grid_power, scan_registers
 
+import datetime
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PATH = os.path.join(BASE_DIR, "config.json")
 EXAMPLE_PATH = os.path.join(BASE_DIR, "config.example.json")
 STATIC_DIR = os.path.join(BASE_DIR, "static")
+BASELINE_PATH = os.path.join(BASE_DIR, "energy_baselines.json")
 
 _config_lock = threading.Lock()
 _config = {}
@@ -56,6 +59,60 @@ def save_config(cfg):
         _config = cfg
 
 
+_baselines = None
+
+
+def _load_baselines():
+    global _baselines
+    if _baselines is None:
+        try:
+            with open(BASELINE_PATH, "r", encoding="utf-8") as f:
+                _baselines = json.load(f)
+        except Exception:
+            _baselines = {}
+    return _baselines
+
+
+def _save_baselines():
+    try:
+        with open(BASELINE_PATH, "w", encoding="utf-8") as f:
+            json.dump(_baselines, f)
+    except Exception:
+        pass
+
+
+def energy_periods(gesamtertrag, gesamtverbrauch):
+    """Woche/Monat = aktueller Gesamtzähler − Stand bei Perioden-Beginn.
+    Beim ersten Sehen einer Woche/eines Monats wird der aktuelle Stand als
+    Basis gespeichert (die erste Periode ist daher anteilig ab Mess-Start)."""
+    out = {"week_ertrag": None, "week_verbrauch": None, "month_ertrag": None, "month_verbrauch": None}
+    if gesamtertrag is None and gesamtverbrauch is None:
+        return out
+    now = datetime.datetime.now()
+    iso = now.isocalendar()
+    keys = {"week": f"{iso[0]}-W{iso[1]:02d}", "month": f"{now.year}-{now.month:02d}"}
+    b = _load_baselines()
+    changed = False
+    for k, period in keys.items():
+        rec = b.get(k)
+        if not rec or rec.get("key") != period:
+            b[k] = {"key": period, "ge": gesamtertrag, "gv": gesamtverbrauch}
+            changed = True
+    if changed:
+        _save_baselines()
+
+    def delta(cur, base):
+        if cur is None or base is None:
+            return None
+        return max(0.0, round(cur - base, 1))
+
+    out["week_ertrag"] = delta(gesamtertrag, b["week"].get("ge"))
+    out["week_verbrauch"] = delta(gesamtverbrauch, b["week"].get("gv"))
+    out["month_ertrag"] = delta(gesamtertrag, b["month"].get("ge"))
+    out["month_verbrauch"] = delta(gesamtverbrauch, b["month"].get("gv"))
+    return out
+
+
 def compute_status(snapshot, cfg):
     """Auslastung + Ampelfarbe + Warnflag aus Messwert und Grenzwerten."""
     limits = cfg.get("limits", {})
@@ -79,11 +136,14 @@ def compute_status(snapshot, cfg):
         "percent": None,
         "level": "offline",        # offline | ok | warn | critical
         "meters": snapshot.get("meters", []),
+        "tagesertrag_kwh": snapshot.get("tagesertrag_kwh"),
+        "tagesverbrauch_kwh": snapshot.get("tagesverbrauch_kwh"),
         "phases_kw": [snapshot.get("power_l1_kw"), snapshot.get("power_l2_kw"), snapshot.get("power_l3_kw")],
         "currents_a": [snapshot.get("current_l1_a"), snapshot.get("current_l2_a"), snapshot.get("current_l3_a")],
         "ts": snapshot.get("ts"),
         "stale": (time.time() - (snapshot.get("ts") or 0)) > 10,
     }
+    state.update(energy_periods(snapshot.get("gesamtertrag_kwh"), snapshot.get("gesamtverbrauch_kwh")))
 
     if not online or power is None:
         return state

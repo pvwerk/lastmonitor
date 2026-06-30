@@ -54,16 +54,18 @@
       <div class="field">
         <label>Netzbezug ermitteln</label>
         <select id="grid_mode">
+          <option value="analyzer">Vom Netzanalysegerät / Janitza (Reg 19/20) – exakt, auch mit Batterie</option>
+          <option value="calc">Verbrauch − PV-Erzeugung (mit PV, ohne Batterie)</option>
           <option value="register">Direkt aus einem Register (ohne PV)</option>
-          <option value="calc">Verbrauch − PV-Erzeugung (mit PV-Anlage)</option>
         </select>
-        <div class="hint">Küche ohne PV: „Direkt aus einem Register" mit Register 2 (Verbrauch).</div>
+        <div class="hint">Empfohlen: Netzanalysegerät (Reg 19/20) – rechnet Batterie/PV korrekt heraus. Ohne Analysegerät: „Verbrauch − PV".</div>
       </div>
       <div class="row">
-        <div class="field"><label>Register Verbrauch / Netzbezug</label><input id="r_power_total" type="number" value="2" /></div>
-        <div class="field"><label>Register Erzeugung (PV)</label><input id="r_production" type="number" value="0" /><div class="hint">Standard 0. Summe der PV-Erzeugung.</div></div>
+        <div class="field" id="analyzerField"><label>Register Netzanalysegerät</label><input id="r_analyzer" type="number" value="19" /><div class="hint">Standard 19 (Reg 19/20).</div></div>
+        <div class="field" id="totalField"><label>Register Verbrauch</label><input id="r_power_total" type="number" value="2" /></div>
+        <div class="field"><label>Register Erzeugung (PV)</label><input id="r_production" type="number" value="0" /><div class="hint">Standard 0.</div></div>
       </div>
-      <div class="hint">Gesamtverbrauch = Netzbezug + Erzeugung (wird automatisch berechnet).</div>
+      <div class="hint">Gesamtverbrauch = Netzbezug + Erzeugung. Energie-Statistik (Tag/Woche/Monat) nutzt Reg 4/6/8/11.</div>
     </div>
 
     <div class="card">

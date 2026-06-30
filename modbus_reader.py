@@ -74,6 +74,10 @@ class Reading:
             "production_kw": None,     # Erzeugung (PV), Summe
             "consumption_kw": None,    # Gesamtverbrauch = Netzbezug + Erzeugung
             "meters": [],              # [{name, type, kw}]
+            "tagesertrag_kwh": None,   # PV-Ertrag heute
+            "tagesverbrauch_kwh": None, # Verbrauch heute
+            "gesamtertrag_kwh": None,  # PV-Ertrag gesamt (für Woche/Monat-Berechnung)
+            "gesamtverbrauch_kwh": None,
             "power_l1_kw": None, "power_l2_kw": None, "power_l3_kw": None,
             "current_l1_a": None, "current_l2_a": None, "current_l3_a": None,
         }
@@ -88,6 +92,20 @@ class Reading:
             return dict(self._data)
 
 
+def read_int16(client, function, address, unit):
+    """Ein einzelnes 16-bit-Register (signed) lesen – z. B. Exponenten."""
+    if address is None:
+        return None
+    address = int(address)
+    if function == "holding":
+        rr = client.read_holding_registers(address=address, count=1, slave=unit)
+    else:
+        rr = client.read_input_registers(address=address, count=1, slave=unit)
+    if rr is None or rr.isError():
+        return None
+    return struct.unpack(">h", struct.pack(">H", rr.registers[0]))[0]
+
+
 def compute_grid_power(client, mb, unit):
     """Netzbezug (in der Geräte-Einheit, vor Skalierung) ermitteln."""
     function = mb.get("function", "input")
@@ -99,7 +117,11 @@ def compute_grid_power(client, mb, unit):
     def rd(addr):
         return read_register(client, function, datatype, addr, unit, bo, wo)
 
-    if mb.get("grid_mode") == "calc":
+    mode = mb.get("grid_mode")
+    if mode == "analyzer":
+        # Netzanalysegerät (Janitza) – exakter Netzbezug, auch mit Batterie korrekt
+        return rd(reg.get("analyzer", 19))
+    if mode == "calc":
         consumption = rd(reg.get("power_total", 2))
         production = rd(reg.get("production", 0))
         if consumption is None:
@@ -242,6 +264,22 @@ class ModbusPoller(threading.Thread):
                         meters.append({"name": m.get("name", "Zähler"), "type": m.get("type", "modbus"),
                                        "kw": None, "error": str(me)})
 
+                # Energie-Zähler (Tag + Gesamt) – für Anzeige & Woche/Monat-Berechnung
+                ereg = mb.get("registers", {})
+                def rd_energy(key):
+                    a = ereg.get(key)
+                    return rd(a) if a is not None else None
+                te = rd_energy("tagesertrag")        # Wh
+                tv = rd_energy("tagesverbrauch")      # Wh
+                ge = rd_energy("gesamtertrag")        # Wh (× 10^Exponent)
+                gv = rd_energy("gesamtverbrauch")     # Wh (× 10^Exponent)
+                ge_exp = read_int16(client, function, ereg.get("gesamtertrag_exp"), unit) if ereg.get("gesamtertrag_exp") is not None else 0
+                gv_exp = read_int16(client, function, ereg.get("gesamtverbrauch_exp"), unit) if ereg.get("gesamtverbrauch_exp") is not None else 0
+                tagesertrag_kwh = None if te is None else te / 1000.0
+                tagesverbrauch_kwh = None if tv is None else tv / 1000.0
+                gesamtertrag_kwh = None if ge is None else ge * (10 ** (ge_exp or 0)) / 1000.0
+                gesamtverbrauch_kwh = None if gv is None else gv * (10 ** (gv_exp or 0)) / 1000.0
+
                 # Phasen/Ströme (nur Gateway-Profil; native Register sind None)
                 def rdopt(key):
                     a = reg.get(key)
@@ -253,6 +291,8 @@ class ModbusPoller(threading.Thread):
                     online=True, error=None,
                     power_kw=power_kw, production_kw=production_kw, consumption_kw=consumption_kw,
                     meters=meters,
+                    tagesertrag_kwh=tagesertrag_kwh, tagesverbrauch_kwh=tagesverbrauch_kwh,
+                    gesamtertrag_kwh=gesamtertrag_kwh, gesamtverbrauch_kwh=gesamtverbrauch_kwh,
                     power_l1_kw=None if p1 is None else sgn * p1 * scale,
                     power_l2_kw=None if p2 is None else sgn * p2 * scale,
                     power_l3_kw=None if p3 is None else sgn * p3 * scale,

@@ -1,5 +1,5 @@
 {
-  "poll_interval_s": 1.0,
+  "poll_interval_s": 5.0,
   "modbus": {
     "profile": "nativ",
     "host": "192.168.1.50",
@@ -11,10 +11,17 @@
     "word_order": "big",
     "power_scale": 0.001,
     "invert_sign": false,
-    "grid_mode": "register",
+    "grid_mode": "analyzer",
     "registers": {
       "power_total": 2,
       "production": 0,
+      "analyzer": 19,
+      "tagesertrag": 4,
+      "tagesverbrauch": 6,
+      "gesamtertrag": 8,
+      "gesamtertrag_exp": 10,
+      "gesamtverbrauch": 11,
+      "gesamtverbrauch_exp": 13,
       "power_l1": null,
       "power_l2": null,
       "power_l3": null,
@@ -29,10 +36,9 @@
     "critical_percent": 95
   },
   "display": {
-    "title": "Küche – Lastmonitor",
+    "title": "Netzbezug",
     "warn_text": "Achtung – Leistung beobachten",
-    "critical_text": "STROM REDUZIEREN!",
-    "show_phases": false
+    "critical_text": "STROM REDUZIEREN!"
   },
   "meters": []
 }

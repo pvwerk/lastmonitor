@@ -50,12 +50,33 @@
       </div>
     </section>
 
-    <!-- RECHTS UNTEN: weitere Zähler -->
-    <section class="meters">
-      <div class="block-title">Zähler</div>
-      <div class="meter-list" id="meterList">
-        <div class="meter-empty">Keine Zähler konfiguriert</div>
+    <!-- RECHTS UNTEN: Energie (Tag, Woche, Monat) -->
+    <section class="energy">
+      <div class="block-title">Energie</div>
+      <div class="energy-today">
+        <div class="etile ertrag">
+          <div class="et-label">Tagesertrag</div>
+          <div class="et-val" id="dayErtrag">– kWh</div>
+        </div>
+        <div class="etile verbrauch">
+          <div class="et-label">Tagesverbrauch</div>
+          <div class="et-val" id="dayVerbrauch">– kWh</div>
+        </div>
       </div>
+      <div class="energy-periods">
+        <div class="ep">
+          <div class="ep-title">Woche</div>
+          <div class="ep-row"><span>Ertrag</span><b id="weekErtrag">–</b></div>
+          <div class="ep-row"><span>Verbrauch</span><b id="weekVerbrauch">–</b></div>
+        </div>
+        <div class="ep">
+          <div class="ep-title">Monat</div>
+          <div class="ep-row"><span>Ertrag</span><b id="monthErtrag">–</b></div>
+          <div class="ep-row"><span>Verbrauch</span><b id="monthVerbrauch">–</b></div>
+        </div>
+      </div>
+      <!-- optionale Zusatz-Zähler (falls konfiguriert) -->
+      <div class="meter-list" id="meterList"></div>
     </section>
   </main>
 

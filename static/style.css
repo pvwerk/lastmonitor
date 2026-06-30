@@ -80,13 +80,15 @@ body.crit .ring { animation: ringpulse 1s infinite; }
 .gauge-center {
   position: absolute;
   left: 0; right: 0;
-  bottom: 6%;
+  top: 55%;
   display: flex;
-  flex-direction: column;
-  align-items: center;
+  flex-direction: row;
+  align-items: baseline;
+  justify-content: center;
+  gap: 1vw;
 }
-.power { font-size: 13vh; font-weight: 800; line-height: 1; color: var(--state); transition: color .4s ease; }
-.power-unit { font-size: 3.5vh; color: var(--muted); margin-top: .3vh; }
+.power { font-size: 11vh; font-weight: 800; line-height: 1; color: var(--state); transition: color .4s ease; }
+.power-unit { font-size: 3.5vh; color: var(--muted); }
 
 /* ---- Auslastung ---- */
 .pct-row { display: flex; align-items: baseline; gap: 1vw; flex-wrap: wrap; justify-content: center; }

@@ -121,7 +121,30 @@ async function pollOnce() {
   }
 }
 
-// Konfig periodisch neu laden (Titel/Texte/Phasen-Schalter können sich ändern)
-loadDisplayConfig();
-setInterval(loadDisplayConfig, 30000);
-startStream();
+// --- Demo-Modus (?demo=ok|warn|critical) – feste Werte ohne Gerät -----------
+function demoState(level) {
+  const max = 43;
+  const map = {
+    ok:       { power: 18.5, pct: 43 },
+    warn:     { power: 35.8, pct: 83 },
+    critical: { power: 41.6, pct: 97 },
+  };
+  const d = map[level] || map.ok;
+  return {
+    online: true, error: null, stale: false,
+    power_kw: d.power, max_power_kw: max, percent: d.pct, level,
+    phases_kw: [null, null, null], currents_a: [null, null, null],
+    channels: [], ts: 0,
+  };
+}
+
+const demo = new URLSearchParams(location.search).get("demo");
+if (demo) {
+  el.title.textContent = cfgDisplay.title;
+  render(demoState(demo));
+} else {
+  // Konfig periodisch neu laden (Titel/Texte/Phasen-Schalter können sich ändern)
+  loadDisplayConfig();
+  setInterval(loadDisplayConfig, 30000);
+  startStream();
+}

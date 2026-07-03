@@ -63,6 +63,10 @@ Wichtigste Register (verifiziert, Doku „PLOpenGateway_Definitionen.xlsx"):
   API-Key + eigene Telefonnummer + eigene Schwelle (%) eintragen. Schickt bei
   Überschreiten eine SMS, danach Erinnerungen im eingestellten Abstand
   (Minimum 1 Minute), optional eine „wieder normal"-SMS. Test-Knopf vorhanden.
+  Zusätzlich abschaltbar: Alarm bei **Verbindungsverlust zum Messgerät**
+  (Standard: nach 3 Min. durchgehend offline) — denn ohne Verbindung wird
+  auch die Überlast-Schwelle nicht überwacht. Hinweis: Fällt das Internet
+  selbst aus, kann in dem Moment keine SMS raus.
 
 ## Updates einspielen
 **Am einfachsten:** in den Einstellungen (`/settings`) den Knopf **„Auf neueste Version aktualisieren"**.

@@ -57,6 +57,12 @@ Wichtigste Register (verifiziert, Doku „PLOpenGateway_Definitionen.xlsx"):
   - Tipp Anschlussleistung: Absicherung (A) × 3 × 230 V ÷ 1000.
 - **Energie**: Tagesertrag/-verbrauch + Woche/Monat (aus dem Gesamtzähler berechnet).
 - **Anzeige**: Titel, Warntexte, Aktualisierungsintervall.
+- **SMS-Benachrichtigung**: jeder kann sich das selbst einrichten, unabhängig von den
+  übrigen Einstellungen — eigener kostenloser Account bei
+  [app.seven.io/signup](https://app.seven.io/signup?create_account) (0,50 € Testguthaben),
+  API-Key + eigene Telefonnummer + eigene Schwelle (%) eintragen. Schickt bei
+  Überschreiten eine SMS, danach Erinnerungen im eingestellten Abstand
+  (Minimum 1 Minute), optional eine „wieder normal"-SMS. Test-Knopf vorhanden.
 
 ## Updates einspielen
 **Am einfachsten:** in den Einstellungen (`/settings`) den Knopf **„Auf neueste Version aktualisieren"**.

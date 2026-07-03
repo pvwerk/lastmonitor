@@ -40,5 +40,15 @@
     "warn_text": "Achtung – Leistung beobachten",
     "critical_text": "STROM REDUZIEREN!"
   },
+  "sms": {
+    "enabled": false,
+    "provider": "seven",
+    "api_key": "",
+    "sender": "Lastmonitor",
+    "phone_number": "",
+    "threshold_percent": 95,
+    "cooldown_minutes": 15,
+    "notify_recovery": true
+  },
   "meters": []
 }

@@ -15,10 +15,14 @@ API:
 """
 import json
 import os
+import re
 import sys
 import subprocess
 import threading
 import time
+import urllib.request
+import urllib.parse
+import urllib.error
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, FileResponse, StreamingResponse
@@ -166,6 +170,144 @@ def compute_status(snapshot, cfg):
     return state
 
 
+# --- SMS-Benachrichtigung (seven.io) ------------------------------------------
+# Jeder kann sich in den Einstellungen selbst einen eigenen seven.io-Account
+# (app.seven.io/signup, 0,50 € Testguthaben) anlegen, dort einen API-Key holen
+# und zusammen mit Telefonnummer + eigener Schwelle hier hinterlegen. Löst aus,
+# wenn der Netzbezug (%) die Schwelle über-/unterschreitet — mit Cooldown gegen
+# SMS-Spam, solange der kritische Zustand anhält.
+
+def normalize_de_number(raw):
+    """+49… / 0049… / 0…  ->  49…  (seven.io-Format, ohne führendes +)."""
+    if not raw:
+        return None
+    s = re.sub(r"[^\d+]", "", str(raw))
+    if s.startswith("+"):
+        s = s[1:]
+    elif s.startswith("00"):
+        s = s[2:]
+    elif s.startswith("0"):
+        s = "49" + s[1:]
+    if not re.fullmatch(r"\d{8,15}", s):
+        return None
+    return s
+
+
+SEVEN_ERROR_MESSAGES = {
+    "101": "Senden an mindestens einen Empfänger fehlgeschlagen.",
+    "201": "Absendername ungültig (max. 11 Zeichen).",
+    "202": "Telefonnummer ungültig.",
+    "301": "Keine Telefonnummer angegeben.",
+    "401": "Text zu lang.",
+    "402": "Diese SMS wurde in den letzten 180 Sekunden bereits gesendet.",
+    "403": "Tageslimit für diese Nummer erreicht.",
+    "500": "Zu wenig Guthaben auf dem seven.io-Konto.",
+    "600": "Fehler beim Versand bei seven.io.",
+    "900": "API-Key ungültig — bitte in den seven.io-Einstellungen prüfen.",
+    "901": "Signaturprüfung fehlgeschlagen.",
+    "902": "Dieser API-Key hat keine Berechtigung für SMS-Versand.",
+    "903": "Absender-IP ist bei seven.io nicht freigegeben.",
+}
+
+
+def seven_error_message(raw):
+    code = raw.get("success") if isinstance(raw, dict) else raw
+    return SEVEN_ERROR_MESSAGES.get(str(code), f"seven.io-Fehlercode: {code}")
+
+
+def send_sms_seven(api_key, sender, to, text):
+    """POST an die seven.io-API. Wirft bei Netzwerk-/HTTP-Fehlern eine Exception."""
+    params = {"to": to, "text": text}
+    if sender:
+        params["from"] = sender
+    data = urllib.parse.urlencode(params).encode("utf-8")
+    req = urllib.request.Request(
+        "https://gateway.seven.io/api/sms",
+        data=data,
+        headers={
+            "X-Api-Key": api_key,
+            "Accept": "application/json",
+            "Content-Type": "application/x-www-form-urlencoded",
+        },
+        method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=15) as resp:
+        raw_text = resp.read().decode("utf-8")
+    # seven.io liefert bei Erfolg ein JSON-Objekt ({"success":"100",...}),
+    # bei Fehlern aber oft nur einen nackten JSON-String mit Fehlercode (z. B. "900"
+    # = ungültiger API-Key) — also robust gegen beide Formen sein.
+    try:
+        body = json.loads(raw_text)
+    except Exception:
+        body = raw_text
+    ok = isinstance(body, dict) and str(body.get("success")) == "100"
+    return {"ok": ok, "raw": body}
+
+
+_sms_state = {"phase": None, "last_sent_ts": 0.0, "last_result": None}
+_sms_lock = threading.Lock()
+
+
+def _sms_send_and_record(sms_cfg, text):
+    api_key = (sms_cfg.get("api_key") or "").strip()
+    phone = normalize_de_number(sms_cfg.get("phone_number"))
+    if not api_key or not phone:
+        return
+    try:
+        result = send_sms_seven(api_key, sms_cfg.get("sender") or "Lastmonitor", phone, text)
+        if not result["ok"]:
+            result["error"] = seven_error_message(result["raw"])
+    except Exception as e:
+        result = {"ok": False, "error": str(e)}
+    _sms_state["last_sent_ts"] = time.time()
+    _sms_state["last_result"] = result
+
+
+def sms_check(state, cfg):
+    """Einmal pro Tick aufgerufen: prüft Schwellenübertritt und verschickt ggf. SMS."""
+    sms_cfg = cfg.get("sms") or {}
+    if not sms_cfg.get("enabled"):
+        return
+    if not state.get("online") or state.get("percent") is None:
+        return
+
+    threshold = float(sms_cfg.get("threshold_percent") or cfg.get("limits", {}).get("critical_percent", 95))
+    cooldown_s = max(1.0, float(sms_cfg.get("cooldown_minutes") or 15)) * 60.0
+    notify_recovery = sms_cfg.get("notify_recovery", True)
+    pct = state["percent"]
+    title = (cfg.get("display") or {}).get("title") or "Lastmonitor"
+    now = time.time()
+
+    with _sms_lock:
+        was_over = _sms_state["phase"] == "over"
+        is_over = pct >= threshold
+
+        if is_over and not was_over:
+            _sms_state["phase"] = "over"
+            _sms_send_and_record(sms_cfg, f"{title}: Netzbezug {pct:.0f}% (Schwelle {threshold:.0f}%) – bitte Verbrauch reduzieren.")
+        elif is_over and was_over:
+            # weiterhin kritisch -> nur nach Ablauf des Cooldowns erneut erinnern
+            if now - _sms_state["last_sent_ts"] >= cooldown_s:
+                _sms_send_and_record(sms_cfg, f"{title}: weiterhin hoher Netzbezug ({pct:.0f}%).")
+        elif not is_over and was_over:
+            _sms_state["phase"] = "ok"
+            if notify_recovery:
+                _sms_send_and_record(sms_cfg, f"{title}: Netzbezug wieder normal ({pct:.0f}%).")
+        elif _sms_state["phase"] is None:
+            _sms_state["phase"] = "ok"
+
+
+def sms_monitor_loop():
+    while True:
+        try:
+            cfg = get_config()
+            state = compute_status(reading.snapshot(), cfg)
+            sms_check(state, cfg)
+        except Exception:
+            pass
+        time.sleep(15)
+
+
 # --- App-Setup ---------------------------------------------------------------
 app = FastAPI(title="Küchen-Lastmonitor")
 reading = Reading()
@@ -176,6 +318,7 @@ poller = ModbusPoller(get_config, reading)
 def _startup():
     load_config()
     poller.start()
+    threading.Thread(target=sms_monitor_loop, daemon=True).start()
 
 
 @app.on_event("shutdown")
@@ -263,6 +406,48 @@ async def api_test(request: Request):
         return JSONResponse({"ok": False, "error": str(e)})
     finally:
         client.close()
+
+
+@app.post("/api/sms/test")
+async def api_sms_test(request: Request):
+    """Test-SMS mit der (ggf. noch ungespeicherten) Konfig aus dem Formular senden."""
+    body = {}
+    try:
+        body = await request.json()
+    except Exception:
+        pass
+    sms_cfg = (body.get("sms") if isinstance(body, dict) else None) or get_config().get("sms", {})
+    api_key = (sms_cfg.get("api_key") or "").strip()
+    phone = normalize_de_number(sms_cfg.get("phone_number"))
+    if not api_key:
+        return JSONResponse({"ok": False, "error": "Kein seven.io-API-Key hinterlegt."})
+    if not phone:
+        return JSONResponse({"ok": False, "error": "Ungültige Telefonnummer."})
+    try:
+        result = send_sms_seven(api_key, sms_cfg.get("sender") or "Lastmonitor", phone,
+                                 "Test-SMS vom Küchen-Lastmonitor – die Benachrichtigung ist eingerichtet.")
+    except urllib.error.HTTPError as e:
+        try:
+            detail = json.loads(e.read().decode("utf-8"))
+        except Exception:
+            detail = str(e)
+        return JSONResponse({"ok": False, "error": f"seven.io HTTP {e.code}", "detail": detail})
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": str(e)})
+    if result["ok"]:
+        return JSONResponse({"ok": True, "balance": result["raw"].get("balance")})
+    return JSONResponse({"ok": False, "error": seven_error_message(result["raw"]), "detail": result["raw"]})
+
+
+@app.get("/api/sms/status")
+def api_sms_status():
+    with _sms_lock:
+        s = dict(_sms_state)
+    s["last_sent_at"] = (
+        datetime.datetime.fromtimestamp(s["last_sent_ts"]).strftime("%d.%m.%Y %H:%M:%S")
+        if s.get("last_sent_ts") else None
+    )
+    return JSONResponse(s)
 
 
 @app.post("/api/scan")

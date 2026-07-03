@@ -124,11 +124,21 @@ function collect() {
       warn_text: $("d_warn_text").value,
       critical_text: $("d_critical_text").value,
     },
+    sms: {
+      enabled: $("sms_enabled").checked,
+      provider: "seven",
+      api_key: $("sms_api_key").value.trim(),
+      sender: $("sms_sender").value.trim() || "Lastmonitor",
+      phone_number: $("sms_phone").value.trim(),
+      threshold_percent: numOrNull($("sms_threshold").value),
+      cooldown_minutes: parseFloat($("sms_cooldown").value) || 15,
+      notify_recovery: $("sms_notify_recovery").checked,
+    },
   };
 }
 
 function apply(cfg) {
-  const m = cfg.modbus || {}, r = m.registers || {}, l = cfg.limits || {}, d = cfg.display || {};
+  const m = cfg.modbus || {}, r = m.registers || {}, l = cfg.limits || {}, d = cfg.display || {}, s = cfg.sms || {};
   _loadedRegisters = Object.assign({}, r);
   $("profile").value = m.profile || "nativ";
   $("host").value = m.host || "";
@@ -154,6 +164,13 @@ function apply(cfg) {
   $("d_warn_text").value = d.warn_text ?? "Achtung – Leistung beobachten";
   $("d_critical_text").value = d.critical_text ?? "STROM REDUZIEREN!";
   $("poll_interval_s").value = cfg.poll_interval_s ?? 1;
+  $("sms_enabled").checked = !!s.enabled;
+  $("sms_api_key").value = s.api_key || "";
+  $("sms_sender").value = s.sender || "Lastmonitor";
+  $("sms_phone").value = s.phone_number || "";
+  $("sms_threshold").value = s.threshold_percent ?? "";
+  $("sms_cooldown").value = s.cooldown_minutes ?? 15;
+  $("sms_notify_recovery").checked = s.notify_recovery !== false;
   updateVisibility();
 }
 
@@ -204,6 +221,25 @@ $("btnTest").addEventListener("click", async () => {
     setMsg("testMsg", res.ok ? `✓ Verbindung OK – Netzbezug: ${res.power_kw} kW (Rohwert ${res.raw})` : "✗ " + (res.error || "Fehlgeschlagen"), !!res.ok);
   } catch (e) { setMsg("testMsg", "✗ Fehler: " + e, false); }
 });
+
+$("btnSmsTest").addEventListener("click", async () => {
+  setMsg("smsTestMsg", "Sende Test-SMS …", true);
+  try {
+    const r = await fetch("/api/sms/test", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sms: collect().sms }) });
+    const res = await r.json();
+    setMsg("smsTestMsg", res.ok ? "✓ SMS gesendet" + (res.balance != null ? ` (Guthaben: ${res.balance} €)` : "") : "✗ " + (res.error || "Fehlgeschlagen"), !!res.ok);
+  } catch (e) { setMsg("smsTestMsg", "✗ Fehler: " + e, false); }
+  loadSmsStatus();
+});
+
+async function loadSmsStatus() {
+  try {
+    const s = await (await fetch("/api/sms/status", { cache: "no-store" })).json();
+    if (!s.last_sent_at) { $("smsStatus").textContent = "Bisher keine SMS versendet."; return; }
+    const ok = s.last_result && s.last_result.ok;
+    $("smsStatus").innerHTML = `Letzte SMS: ${esc(s.last_sent_at)} — ${ok ? "✓ erfolgreich" : "✗ fehlgeschlagen (" + esc((s.last_result && (s.last_result.error || JSON.stringify(s.last_result.raw))) || "?") + ")"}`;
+  } catch (e) { /* still ok */ }
+}
 
 // ---- Register-Scanner -------------------------------------------------------
 let scanTimer = null, lastScan = {};
@@ -318,3 +354,4 @@ window.rollbackTo = async function (hash) {
 load();
 loadVersion();
 loadVersions();
+loadSmsStatus();

@@ -127,6 +127,30 @@
     </div>
 
     <div class="card">
+      <h2>SMS-Benachrichtigung</h2>
+      <p class="hint" style="margin-bottom:12px">
+        Wer benachrichtigt werden möchte, kann sich das hier <b>selbst einrichten</b> — unabhängig
+        von den übrigen Einstellungen. Kostenloser Account bei
+        <a href="https://app.seven.io/signup?create_account" target="_blank" rel="noreferrer" style="color:#60a5fa">app.seven.io/signup</a>
+        (0,50&nbsp;€ Testguthaben), dort einen <b>API-Key</b> erzeugen und unten einfügen.
+        Danach eigene Telefonnummer und eigene Schwelle eintragen, ab der eine SMS kommen soll.
+      </p>
+      <div class="field toggle"><input id="sms_enabled" type="checkbox" /><label style="margin:0">SMS-Benachrichtigung aktiviert</label></div>
+      <div class="row">
+        <div class="field" style="flex:2"><label>seven.io API-Key</label><input id="sms_api_key" placeholder="API-Key einfügen" /></div>
+        <div class="field"><label>Absendername</label><input id="sms_sender" placeholder="Lastmonitor" maxlength="11" /><div class="hint">Max. 11 Zeichen.</div></div>
+      </div>
+      <div class="row">
+        <div class="field"><label>Telefonnummer</label><input id="sms_phone" placeholder="z. B. 0176 12345678" /></div>
+        <div class="field"><label>SMS ab Auslastung (%)</label><input id="sms_threshold" type="number" placeholder="z. B. 95" /><div class="hint">Leer = nutzt „Kritisch ab %" von oben.</div></div>
+        <div class="field"><label>Erinnerung alle (Minuten)</label><input id="sms_cooldown" type="number" value="15" min="1" /><div class="hint">Solange es kritisch bleibt. Minimum 1 Minute.</div></div>
+      </div>
+      <div class="field toggle"><input id="sms_notify_recovery" type="checkbox" checked /><label style="margin:0">Auch benachrichtigen, wenn wieder normal</label></div>
+      <div class="btns"><button class="btn-ghost" id="btnSmsTest">Test-SMS senden</button><span id="smsTestMsg" class="msg"></span></div>
+      <div id="smsStatus" class="hint" style="margin-top:8px"></div>
+    </div>
+
+    <div class="card">
       <h2>Anzeige</h2>
       <div class="field"><label>Titel (Netzbezug-Block)</label><input id="d_title" value="Netzbezug" /></div>
       <div class="row">

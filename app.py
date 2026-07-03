@@ -244,11 +244,19 @@ def send_sms_seven(api_key, sender, to, text):
     return {"ok": ok, "raw": body}
 
 
-_sms_state = {"phase": None, "last_sent_ts": 0.0, "last_result": None}
+_sms_state = {
+    "last_sent_ts": 0.0, "last_result": None,   # nur für die Status-Anzeige in /settings
+    "power_phase": None, "power_last_sent_ts": 0.0,
+    "conn_phase": None, "conn_last_sent_ts": 0.0, "offline_since": None,
+}
 _sms_lock = threading.Lock()
 
 
 def _sms_send_and_record(sms_cfg, text):
+    """Schickt die SMS und merkt sich das Ergebnis für die Status-Anzeige.
+    Cooldown-Zeitstempel pflegt der jeweilige Aufrufer selbst (getrennt je
+    Alarmtyp, damit sich Leistungs- und Verbindungs-Alarme nicht gegenseitig
+    den Cooldown zurücksetzen)."""
     api_key = (sms_cfg.get("api_key") or "").strip()
     phone = normalize_de_number(sms_cfg.get("phone_number"))
     if not api_key or not phone:
@@ -264,7 +272,7 @@ def _sms_send_and_record(sms_cfg, text):
 
 
 def sms_check(state, cfg):
-    """Einmal pro Tick aufgerufen: prüft Schwellenübertritt und verschickt ggf. SMS."""
+    """Leistungs-Schwelle: einmal pro Tick prüfen und ggf. SMS verschicken."""
     sms_cfg = cfg.get("sms") or {}
     if not sms_cfg.get("enabled"):
         return
@@ -279,22 +287,72 @@ def sms_check(state, cfg):
     now = time.time()
 
     with _sms_lock:
-        was_over = _sms_state["phase"] == "over"
+        was_over = _sms_state["power_phase"] == "over"
         is_over = pct >= threshold
 
         if is_over and not was_over:
-            _sms_state["phase"] = "over"
+            _sms_state["power_phase"] = "over"
+            _sms_state["power_last_sent_ts"] = now
             _sms_send_and_record(sms_cfg, f"{title}: Netzbezug {pct:.0f}% (Schwelle {threshold:.0f}%) – bitte Verbrauch reduzieren.")
         elif is_over and was_over:
             # weiterhin kritisch -> nur nach Ablauf des Cooldowns erneut erinnern
-            if now - _sms_state["last_sent_ts"] >= cooldown_s:
+            if now - _sms_state["power_last_sent_ts"] >= cooldown_s:
+                _sms_state["power_last_sent_ts"] = now
                 _sms_send_and_record(sms_cfg, f"{title}: weiterhin hoher Netzbezug ({pct:.0f}%).")
         elif not is_over and was_over:
-            _sms_state["phase"] = "ok"
+            _sms_state["power_phase"] = "ok"
             if notify_recovery:
+                _sms_state["power_last_sent_ts"] = now
                 _sms_send_and_record(sms_cfg, f"{title}: Netzbezug wieder normal ({pct:.0f}%).")
-        elif _sms_state["phase"] is None:
-            _sms_state["phase"] = "ok"
+        elif _sms_state["power_phase"] is None:
+            _sms_state["power_phase"] = "ok"
+
+
+def sms_check_connection(state, cfg):
+    """Verbindung zum Messgerät (PLEXLOG): SMS, wenn die Verbindung länger als
+    connection_loss_after_minutes weg ist — ohne Verbindung werden Überlast-
+    Schwellen NICHT überwacht, das soll niemand unbemerkt verpassen. Danach
+    Erinnerungen im gleichen Cooldown-Abstand wie beim Leistungs-Alarm, plus
+    eine „wieder da"-SMS bei Rückkehr.
+    Wichtiger Vorbehalt: Fällt das Internet selbst aus, kann in dem Moment
+    KEINE SMS raus — das lässt sich technisch nicht umgehen. Sobald die
+    Verbindung (Gerät + Internet) wieder da ist, kommt eine Nachricht."""
+    sms_cfg = cfg.get("sms") or {}
+    if not sms_cfg.get("enabled") or not sms_cfg.get("notify_connection_loss"):
+        with _sms_lock:
+            _sms_state["conn_phase"] = None
+            _sms_state["offline_since"] = None
+        return
+
+    online = bool(state.get("online")) and not state.get("stale")
+    after_s = max(0.5, float(sms_cfg.get("connection_loss_after_minutes") or 3)) * 60.0
+    cooldown_s = max(1.0, float(sms_cfg.get("cooldown_minutes") or 15)) * 60.0
+    notify_recovery = sms_cfg.get("notify_recovery", True)
+    title = (cfg.get("display") or {}).get("title") or "Lastmonitor"
+    now = time.time()
+
+    with _sms_lock:
+        was_offline = _sms_state["conn_phase"] == "offline"
+
+        if not online:
+            if _sms_state["offline_since"] is None:
+                _sms_state["offline_since"] = now
+            duration_min = (now - _sms_state["offline_since"]) / 60.0
+            if (now - _sms_state["offline_since"]) < after_s:
+                return  # noch innerhalb der Toleranz (kurzer Aussetzer) — kein Alarm
+            if not was_offline:
+                _sms_state["conn_phase"] = "offline"
+                _sms_state["conn_last_sent_ts"] = now
+                _sms_send_and_record(sms_cfg, f"{title}: Verbindung zum Messgerät seit {duration_min:.0f} Min. verloren — Überlast wird gerade NICHT überwacht!")
+            elif now - _sms_state["conn_last_sent_ts"] >= cooldown_s:
+                _sms_state["conn_last_sent_ts"] = now
+                _sms_send_and_record(sms_cfg, f"{title}: Verbindung zum Messgerät weiterhin gestört (seit {duration_min:.0f} Min.).")
+        else:
+            if was_offline and notify_recovery:
+                _sms_state["conn_last_sent_ts"] = now
+                _sms_send_and_record(sms_cfg, f"{title}: Verbindung zum Messgerät wieder da.")
+            _sms_state["conn_phase"] = "ok"
+            _sms_state["offline_since"] = None
 
 
 def sms_monitor_loop():
@@ -303,6 +361,7 @@ def sms_monitor_loop():
             cfg = get_config()
             state = compute_status(reading.snapshot(), cfg)
             sms_check(state, cfg)
+            sms_check_connection(state, cfg)
         except Exception:
             pass
         time.sleep(15)

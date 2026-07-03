@@ -133,6 +133,8 @@ function collect() {
       threshold_percent: numOrNull($("sms_threshold").value),
       cooldown_minutes: parseFloat($("sms_cooldown").value) || 15,
       notify_recovery: $("sms_notify_recovery").checked,
+      notify_connection_loss: $("sms_notify_conn").checked,
+      connection_loss_after_minutes: parseFloat($("sms_conn_after").value) || 3,
     },
   };
 }
@@ -171,6 +173,8 @@ function apply(cfg) {
   $("sms_threshold").value = s.threshold_percent ?? "";
   $("sms_cooldown").value = s.cooldown_minutes ?? 15;
   $("sms_notify_recovery").checked = s.notify_recovery !== false;
+  $("sms_notify_conn").checked = s.notify_connection_loss !== false;
+  $("sms_conn_after").value = s.connection_loss_after_minutes ?? 3;
   updateVisibility();
 }
 

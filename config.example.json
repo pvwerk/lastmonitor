@@ -48,7 +48,9 @@
     "phone_number": "",
     "threshold_percent": 95,
     "cooldown_minutes": 15,
-    "notify_recovery": true
+    "notify_recovery": true,
+    "notify_connection_loss": true,
+    "connection_loss_after_minutes": 3
   },
   "meters": []
 }

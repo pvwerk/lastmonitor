@@ -146,6 +146,13 @@
         <div class="field"><label>Erinnerung alle (Minuten)</label><input id="sms_cooldown" type="number" value="15" min="1" /><div class="hint">Solange es kritisch bleibt. Minimum 1 Minute.</div></div>
       </div>
       <div class="field toggle"><input id="sms_notify_recovery" type="checkbox" checked /><label style="margin:0">Auch benachrichtigen, wenn wieder normal</label></div>
+      <div class="row" style="margin-top:10px;padding-top:10px;border-top:1px solid #1f2937">
+        <div class="field toggle" style="align-self:end"><input id="sms_notify_conn" type="checkbox" checked /><label style="margin:0">Auch bei Verbindungsverlust zum Messgerät benachrichtigen</label></div>
+        <div class="field"><label>Verbindung gilt als verloren nach (Minuten)</label><input id="sms_conn_after" type="number" min="0.5" step="0.5" value="3" /></div>
+      </div>
+      <p class="hint">Ohne Verbindung zum PLEXLOG wird die Überlast-Schwelle nicht überwacht — das
+        soll niemand unbemerkt verpassen. <b>Wichtig:</b> Fällt das Internet selbst aus, kann in dem
+        Moment keine SMS raus; sobald alles wieder da ist, kommt eine Nachricht.</p>
       <div class="btns"><button class="btn-ghost" id="btnSmsTest">Test-SMS senden</button><span id="smsTestMsg" class="msg"></span></div>
       <div id="smsStatus" class="hint" style="margin-top:8px"></div>
     </div>

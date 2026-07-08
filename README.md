@@ -85,6 +85,28 @@ uvicorn app:app --reload --port 8000
 # Einstellungen: http://localhost:8000/settings
 ```
 
+## Fernwartung / Ferndiagnose (`remote_report`)
+Läuft der Pi an einem anderen Standort (z. B. bei einem Kunden, nicht im
+selben Netzwerk), ist `/settings` von hier aus nicht mehr erreichbar. Dafür
+schickt der Pi sich bei aktivierter `remote_report`-Einstellung
+(`config.json`) alle `interval_s` Sekunden einen vollständigen
+Selbst-Bericht (Hostname, lokale IP, Modbus-Konfiguration, Software-Version,
+Live-Status inkl. Fehlermeldung) an einen kleinen Endpoint im PVWERK-CRM
+(`api/external/device-report.js`, Tabelle `external_device_reports`).
+Authentifizierung per geteiltem Secret, kein Login nötig. Enthält bewusst
+**keine** Geheimnisse (SMS-API-Key wird nur als „gesetzt: ja/nein" gemeldet).
+
+```json
+"remote_report": {
+  "enabled": true,
+  "endpoint": "https://crm.photovoltaikwerk.de/api/external/device-report",
+  "secret": "<geteiltes Secret, aus system_settings.external_device_reports_secret>",
+  "device_source": "lastmonitor-sampl",
+  "interval_s": 60
+}
+```
+Status des letzten Versands: `GET /api/remote-report/status`.
+
 ## Aufbau
 ```
 app.py              FastAPI-Server (Anzeige, Einstellungen, API, SSE-Livestream)

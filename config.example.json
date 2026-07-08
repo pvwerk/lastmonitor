@@ -52,5 +52,12 @@
     "notify_connection_loss": true,
     "connection_loss_after_minutes": 3
   },
-  "meters": []
+  "meters": [],
+  "remote_report": {
+    "enabled": false,
+    "endpoint": "https://crm.photovoltaikwerk.de/api/external/device-report",
+    "secret": "",
+    "device_source": "lastmonitor-sampl",
+    "interval_s": 60
+  }
 }

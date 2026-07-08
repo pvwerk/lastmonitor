@@ -12,6 +12,12 @@ API:
   GET  /api/config   -> aktuelle Konfiguration
   POST /api/config   -> Konfiguration speichern
   POST /api/test     -> Verbindung mit gegebener Konfig testen
+  GET  /api/remote-report/status -> Status des Fernwartungs-Selbstberichts
+
+Fernwartung: sendet bei config.remote_report.enabled=true regelmäßig einen
+Selbst-Bericht (IP, Modbus-Konfig, Live-Status) an api/external/device-report.js
+im PVWERK-CRM, damit der Pi nach der Inbetriebnahme auch an einem anderen
+Standort (anderes Netzwerk) aus der Ferne diagnostizierbar bleibt.
 """
 import json
 import os
@@ -355,6 +361,119 @@ def sms_check_connection(state, cfg):
             _sms_state["offline_since"] = None
 
 
+# --- Fernwartung: periodischer Selbst-Bericht -------------------------------
+# Der Pi läuft nach der Inbetriebnahme an einem anderen Standort (nicht mehr
+# im selben Netzwerk erreichbar). Damit Fernwartung/-diagnose während der
+# Inbetriebnahme trotzdem möglich ist, schickt der Pi sich selbst regelmäßig
+# einen vollständigen Status-Bericht an einen kleinen Endpoint im PVWERK-CRM
+# (api/external/device-report.js, geteiltes Secret statt Login — der Pi ist
+# kein CRM-Nutzer). Enthält bewusst ALLES, was für eine Ferndiagnose nötig
+# ist (IP, Modbus-Konfiguration, Live-Status) — aber keine Geheimnisse
+# (SMS-API-Key wird nur als "gesetzt: ja/nein" gemeldet, nicht im Klartext).
+_report_state = {"last_sent_ts": 0.0, "last_ok": None, "last_error": None}
+_process_start_ts = time.time()
+
+
+def _local_ip():
+    """Beste Schätzung der lokalen IP (ohne tatsächlich Daten zu senden)."""
+    import socket
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            s.connect(("8.8.8.8", 80))
+            return s.getsockname()[0]
+        finally:
+            s.close()
+    except Exception:
+        try:
+            return socket.gethostbyname(socket.gethostname())
+        except Exception:
+            return None
+
+
+def _device_id():
+    """Stabile Geräte-Kennung: Raspberry-Pi-Seriennummer aus /proc/cpuinfo,
+    sonst Hostname (z.B. beim lokalen Testen auf dem Mac)."""
+    try:
+        with open("/proc/cpuinfo") as f:
+            for line in f:
+                if line.startswith("Serial"):
+                    return "pi-" + line.split(":")[-1].strip()
+    except Exception:
+        pass
+    import socket
+    return socket.gethostname()
+
+
+def build_self_report(cfg):
+    """Vollständiger Selbst-Bericht für die Ferndiagnose."""
+    import socket
+    state = compute_status(reading.snapshot(), cfg)
+    modbus_cfg = dict(cfg.get("modbus", {}))
+    modbus_cfg.pop("registers", None)  # zu viele Details für den Kurz-Bericht
+    sms_cfg = cfg.get("sms", {}) or {}
+    return {
+        "app_version": current_version(),
+        "uptime_s": round(time.time() - _process_start_ts),
+        "hostname": socket.gethostname(),
+        "local_ip": _local_ip(),
+        "modbus_config": modbus_cfg,
+        "limits": cfg.get("limits", {}),
+        "sms_configured": bool((sms_cfg.get("api_key") or "").strip()),
+        "sms_enabled": bool(sms_cfg.get("enabled")),
+        "status": {
+            "online": state.get("online"),
+            "error": state.get("error"),
+            "power_kw": state.get("power_kw"),
+            "level": state.get("level"),
+            "stale": state.get("stale"),
+            "last_reading_ts": state.get("ts"),
+        },
+        "report_generated_at": time.time(),
+    }
+
+
+def send_remote_report(report, rr_cfg):
+    """POST an api/external/device-report.js. Wirft bei Fehlern eine Exception."""
+    body = json.dumps({
+        "device_source": rr_cfg.get("device_source") or "lastmonitor",
+        "device_id": _device_id(),
+        "report": report,
+    }).encode("utf-8")
+    endpoint = rr_cfg["endpoint"] + "?secret=" + urllib.parse.quote(rr_cfg.get("secret") or "")
+    req = urllib.request.Request(
+        endpoint, data=body,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=15) as resp:
+        return json.loads(resp.read().decode("utf-8"))
+
+
+def remote_report_loop():
+    while True:
+        try:
+            cfg = get_config()
+            rr_cfg = cfg.get("remote_report") or {}
+            if rr_cfg.get("enabled") and rr_cfg.get("endpoint") and rr_cfg.get("secret"):
+                report = build_self_report(cfg)
+                try:
+                    send_remote_report(report, rr_cfg)
+                    _report_state["last_ok"] = time.time()
+                    _report_state["last_error"] = None
+                except Exception as e:
+                    _report_state["last_error"] = str(e)
+                _report_state["last_sent_ts"] = time.time()
+        except Exception:
+            pass
+        interval = 300
+        try:
+            interval = float((get_config().get("remote_report") or {}).get("interval_s", 300) or 300)
+        except Exception:
+            pass
+        time.sleep(max(30.0, interval))
+
+
 def sms_monitor_loop():
     while True:
         try:
@@ -378,6 +497,7 @@ def _startup():
     load_config()
     poller.start()
     threading.Thread(target=sms_monitor_loop, daemon=True).start()
+    threading.Thread(target=remote_report_loop, daemon=True).start()
 
 
 @app.on_event("shutdown")
@@ -398,6 +518,12 @@ def settings_page():
 @app.get("/api/state")
 def api_state():
     return JSONResponse(compute_status(reading.snapshot(), get_config()))
+
+
+@app.get("/api/remote-report/status")
+def api_remote_report_status():
+    """Zeigt den Zustand des Selbst-Berichts in /settings an (letzter Versand, Fehler)."""
+    return JSONResponse(_report_state)
 
 
 @app.get("/api/stream")

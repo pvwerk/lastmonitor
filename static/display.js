@@ -238,6 +238,18 @@ async function loadDisplayConfig() {
   } catch (e) { /* ignore */ }
 }
 
+// --- Auto-Reload: lädt die Anzeige neu, sobald in den Einstellungen auf
+// "Speichern & neu laden" geklickt wurde ------------------------------------
+let reloadToken = null;
+async function checkReload() {
+  try {
+    const r = await fetch("/api/reload-token");
+    const d = await r.json();
+    if (reloadToken === null) { reloadToken = d.token; return; }
+    if (d.token !== reloadToken) { location.reload(); }
+  } catch (e) { /* ignore */ }
+}
+
 // --- Kosten (Verbrauch/Eigenverbrauch/Kosten, Heute + Vortag) ---------------
 function euro(v) {
   return (v === null || v === undefined) ? "– €" : fmt(v, 2) + " €";
@@ -331,6 +343,8 @@ if (demo) {
 } else {
   loadDisplayConfig();
   setInterval(loadDisplayConfig, 30000);
+  checkReload();
+  setInterval(checkReload, 8000);
   loadStandbyState();
   setInterval(loadStandbyState, 20000);
   loadCosts();

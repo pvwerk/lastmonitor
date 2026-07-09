@@ -710,6 +710,26 @@ def api_costs():
     return JSONResponse(costs_snapshot())
 
 
+# --- Auto-Reload der Kiosk-Anzeige nach Einstellungs-Änderungen --------------
+# Die Anzeige (display.js) pollt /api/reload-token und lädt sich selbst neu,
+# sobald sich der Wert ändert. Der Settings-Button "Speichern & neu laden"
+# löst das über /api/reload aus – dadurch übernimmt der Chromium-Kiosk
+# Layout-/Code-Änderungen automatisch, ohne dass jemand am Pi selbst
+# eingreifen muss.
+_reload_token = {"value": time.time()}
+
+
+@app.get("/api/reload-token")
+def api_reload_token():
+    return JSONResponse({"token": _reload_token["value"]})
+
+
+@app.post("/api/reload")
+def api_trigger_reload():
+    _reload_token["value"] = time.time()
+    return JSONResponse({"ok": True, "token": _reload_token["value"]})
+
+
 @app.get("/api/remote-report/status")
 def api_remote_report_status():
     """Zeigt den Zustand des Selbst-Berichts in /settings an (letzter Versand, Fehler)."""

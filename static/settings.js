@@ -291,7 +291,10 @@ $("btnSave").addEventListener("click", async () => {
   try {
     const r = await fetch("/api/config", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(collect()) });
     const res = await r.json();
-    setMsg("saveMsg", res.ok ? "✓ Gespeichert. Die Anzeige übernimmt die Werte automatisch." : "Fehler beim Speichern.", !!res.ok);
+    if (res.ok) {
+      try { await fetch("/api/reload", { method: "POST" }); } catch (e) { /* Reload-Anstoß ist nur Komfort */ }
+    }
+    setMsg("saveMsg", res.ok ? "✓ Gespeichert. Die Küchen-Anzeige lädt sich in ein paar Sekunden neu." : "Fehler beim Speichern.", !!res.ok);
     setTimeout(loadStandbyStatus, 1000);
     setTimeout(loadCostsStatus, 1000);
   } catch (e) { setMsg("saveMsg", "Fehler: " + e, false); }

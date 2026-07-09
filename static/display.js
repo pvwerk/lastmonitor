@@ -26,6 +26,7 @@ const el = {
   overlay: document.getElementById("overlay"),
   overlayText: document.getElementById("overlayText"),
   overlaySub: document.getElementById("overlaySub"),
+  standbyOverlay: document.getElementById("standbyOverlay"),
 };
 
 let cfgDisplay = { title: "Netzbezug", critical_text: "STROM REDUZIEREN!", warn_text: "" };
@@ -137,6 +138,16 @@ async function loadDisplayConfig() {
   } catch (e) { /* ignore */ }
 }
 
+// --- Standby-Zeitfenster: dunkelt außerhalb des Fensters komplett ab --------
+async function loadStandbyState() {
+  try {
+    const r = await fetch("/api/standby-state");
+    const s = await r.json();
+    const shouldBeOn = s.enabled ? s.should_be_on !== false : true;
+    el.standbyOverlay.classList.toggle("hidden", shouldBeOn);
+  } catch (e) { /* ignore, Overlay-Zustand bleibt wie er ist */ }
+}
+
 let es = null, pollTimer = null;
 
 function startStream() {
@@ -197,5 +208,7 @@ if (demo) {
 } else {
   loadDisplayConfig();
   setInterval(loadDisplayConfig, 30000);
+  loadStandbyState();
+  setInterval(loadStandbyState, 20000);
   startStream();
 }

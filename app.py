@@ -21,7 +21,6 @@ Standort (anderes Netzwerk) aus der Ferne diagnostizierbar bleibt.
 """
 import json
 import os
-import pwd
 import re
 import sys
 import subprocess
@@ -126,14 +125,17 @@ def energy_periods(gesamtertrag, gesamtverbrauch):
     return out
 
 
-# --- Standby-Zeitfenster (Bildschirm per DPMS AN/AUS je Wochentag) -----------
-# Läuft als eigener Hintergrund-Thread und schaltet den angeschlossenen Monitor
-# per `xset dpms force on/off` tatsächlich ab (nicht nur ein schwarzes Bild) –
-# der Dienst läuft headless (systemd), daher DISPLAY/XAUTHORITY der Desktop-
-# Sitzung (gleicher Linux-User) explizit setzen.
+# --- Standby-Zeitfenster (Bildschirm-Anzeige AN/AUS je Wochentag) ------------
+# Berechnet nur den Soll-Zustand; die Kiosk-Anzeige (display.js) pollt
+# /api/standby-state und blendet außerhalb des Fensters selbst ab (schwarzer
+# Vollbild-Overlay). Bewusst KEIN Hardware-DPMS/wlr-randr-Aufruf von hier aus:
+# der Kiosk läuft unter Wayland (labwc) mit einem "Headless"-Ausgang – den
+# abzuschalten bringt den gesamten Compositor zum Absturz (empirisch
+# getestet am 09.07.2026, per Reboot wiederhergestellt). Software-Abblendung
+# im bereits laufenden Browser ist der abstürzsichere Weg.
 WEEKDAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
 
-_standby_state = {"applied_on": None, "should_be_on": None, "last_check": None, "last_error": None}
+_standby_state = {"should_be_on": None, "last_check": None}
 
 
 def _resolve_standby_window(days, weekday_idx, _depth=0):
@@ -177,43 +179,15 @@ def standby_is_on_now(cfg, now=None):
     return cur_m >= on_m or cur_m < off_m  # Fenster über Mitternacht
 
 
-def _x_env():
-    try:
-        home = pwd.getpwuid(os.getuid()).pw_dir
-    except Exception:
-        home = os.path.expanduser("~")
-    env = dict(os.environ)
-    env["DISPLAY"] = ":0"
-    env["XAUTHORITY"] = os.path.join(home, ".Xauthority")
-    return env
-
-
-def _apply_dpms(on):
-    try:
-        subprocess.run(
-            ["xset", "-display", ":0", "dpms", "force", "on" if on else "off"],
-            env=_x_env(), timeout=5, capture_output=True, check=False,
-        )
-        return True
-    except Exception as e:
-        _standby_state["last_error"] = str(e)
-        return False
-
-
 def standby_loop():
     while True:
         try:
             cfg = get_config()
-            desired = standby_is_on_now(cfg)
-            _standby_state["should_be_on"] = desired
+            _standby_state["should_be_on"] = standby_is_on_now(cfg)
             _standby_state["last_check"] = time.time()
-            if desired != _standby_state["applied_on"]:
-                if _apply_dpms(desired):
-                    _standby_state["applied_on"] = desired
-                    _standby_state["last_error"] = None
-        except Exception as e:
-            _standby_state["last_error"] = str(e)
-        time.sleep(20)
+        except Exception:
+            pass
+        time.sleep(15)
 
 
 def compute_status(snapshot, cfg):
@@ -621,10 +595,8 @@ def api_standby_state():
     return JSONResponse({
         "enabled": bool(sb.get("enabled")),
         "should_be_on": _standby_state.get("should_be_on"),
-        "applied_on": _standby_state.get("applied_on"),
         "today_window": {"on": window[0], "off": window[1]} if window else None,
         "last_check": _standby_state.get("last_check"),
-        "last_error": _standby_state.get("last_error"),
     })
 
 

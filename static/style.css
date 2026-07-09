@@ -181,6 +181,13 @@ body.crit .ring { animation: ringpulse 1s infinite; }
   50%      { background: rgba(120, 10, 10, .97); }
 }
 
+/* ---- Standby-Zeitfenster (dunkelt komplett ab, liegt über allem) ---- */
+.standby-overlay {
+  position: fixed; inset: 0; z-index: 200;
+  background: #000;
+}
+.standby-overlay.hidden { display: none; }
+
 /* ===========================================================
    Einstellungen
    =========================================================== */

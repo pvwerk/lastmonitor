@@ -57,6 +57,15 @@ Wichtigste Register (verifiziert, Doku „PLOpenGateway_Definitionen.xlsx"):
   - Tipp Anschlussleistung: Absicherung (A) × 3 × 230 V ÷ 1000.
 - **Energie**: Tagesertrag/-verbrauch + Woche/Monat (aus dem Gesamtzähler berechnet).
 - **Anzeige**: Titel, Warntexte, Aktualisierungsintervall.
+- **Standby-Zeitfenster**: je Wochentag eigenes „AN von/bis" (mit „wie Vortag"-Häkchen);
+  außerhalb des Fensters dunkelt die Anzeige komplett ab. Software-Overlay, kein Hardware-DPMS
+  (auf diesem Pi unter Wayland/labwc nicht sicher steuerbar).
+- **Kosten (Verbrauch/Eigenverbrauch)**: Bezugskosten + PV-Strom-Kosten (€/kWh) eintragen,
+  daraus werden Verbrauch, Eigenverbrauch (aus eigener PV gedeckter Anteil) und Kosten für
+  Heute + Vortag laufend im Hintergrund berechnet (`daily_costs.json`, gitignored) und in
+  den Einstellungen angezeigt. Auf der Küchen-Anzeige nur sichtbar, wenn „Auf der
+  Küchen-Anzeige zeigen" aktiviert ist (dann wandert die Erzeugung klein nach links unten,
+  1/3 Höhe, rechts oben stehen die Kosten-Karten; „Heute" aktualisiert sich dort alle 60 s).
 - **SMS-Benachrichtigung**: jeder kann sich das selbst einrichten, unabhängig von den
   übrigen Einstellungen — eigener kostenloser Account bei
   [app.seven.io/signup](https://app.seven.io/signup?create_account) (0,50 € Testguthaben),

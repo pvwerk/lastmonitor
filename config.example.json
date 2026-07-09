@@ -65,6 +65,11 @@
     "connection_loss_after_minutes": 3
   },
   "meters": [],
+  "costs": {
+    "show_on_display": false,
+    "bezug_eur_kwh": 0.35,
+    "pv_eur_kwh": 0.10
+  },
   "remote_report": {
     "enabled": false,
     "endpoint": "https://crm.photovoltaikwerk.de/api/external/device-report",

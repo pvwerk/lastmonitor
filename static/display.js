@@ -27,7 +27,16 @@ const el = {
   overlayText: document.getElementById("overlayText"),
   overlaySub: document.getElementById("overlaySub"),
   standbyOverlay: document.getElementById("standbyOverlay"),
+  prodMini: document.getElementById("prodMini"),
+  costTodayVerbrauch: document.getElementById("costTodayVerbrauch"),
+  costTodayEigen: document.getElementById("costTodayEigen"),
+  costTodayKosten: document.getElementById("costTodayKosten"),
+  costPrevVerbrauch: document.getElementById("costPrevVerbrauch"),
+  costPrevEigen: document.getElementById("costPrevEigen"),
+  costPrevKosten: document.getElementById("costPrevKosten"),
 };
+
+let costsEnabled = false;
 
 let cfgDisplay = { title: "Netzbezug", critical_text: "STROM REDUZIEREN!", warn_text: "" };
 
@@ -38,7 +47,7 @@ function fmt(v, digits = 1) {
 
 function render(state) {
   const level = state.level || "offline";
-  el.main.className = "layout level-" + level;
+  el.main.className = "layout level-" + level + (costsEnabled ? " costs-on" : "");
   document.body.classList.toggle("crit", level === "critical");
 
   // Netzbezug (Betrag im Tacho)
@@ -69,9 +78,11 @@ function render(state) {
     el.dirText.textContent = "–";
   }
 
-  // Erzeugung
-  el.prod.textContent = (state.production_kw === null || state.production_kw === undefined)
+  // Erzeugung (großes Feld + ggf. kleines Feld bei aktivierter Kosten-Anzeige)
+  const prodText = (state.production_kw === null || state.production_kw === undefined)
     ? "–" : fmt(Math.max(0, state.production_kw), 1);
+  el.prod.textContent = prodText;
+  el.prodMini.textContent = prodText;
 
   // Energie (Tag / Woche / Monat)
   const kwh = (v) => (v === null || v === undefined) ? "– kWh" : fmt(v, 1) + " kWh";
@@ -136,6 +147,28 @@ async function loadDisplayConfig() {
       document.title = cfgDisplay.title || "Küchen-Lastmonitor";
     }
   } catch (e) { /* ignore */ }
+}
+
+// --- Kosten (Verbrauch/Eigenverbrauch/Kosten, Heute + Vortag) ---------------
+function euro(v) {
+  return (v === null || v === undefined) ? "– €" : fmt(v, 2) + " €";
+}
+function kwhVal(v) {
+  return (v === null || v === undefined) ? "– kWh" : fmt(v, 1) + " kWh";
+}
+async function loadCosts() {
+  try {
+    const r = await fetch("/api/costs");
+    const c = await r.json();
+    costsEnabled = !!c.show_on_display;
+    const t = c.today || {}, p = c.prev || {};
+    el.costTodayVerbrauch.textContent = kwhVal(t.verbrauch_kwh);
+    el.costTodayEigen.textContent = kwhVal(t.eigenverbrauch_kwh);
+    el.costTodayKosten.textContent = euro(t.kosten_eur);
+    el.costPrevVerbrauch.textContent = kwhVal(p.verbrauch_kwh);
+    el.costPrevEigen.textContent = kwhVal(p.eigenverbrauch_kwh);
+    el.costPrevKosten.textContent = euro(p.kosten_eur);
+  } catch (e) { /* ignore, alte Werte bleiben stehen */ }
 }
 
 // --- Standby-Zeitfenster: dunkelt außerhalb des Fensters komplett ab --------
@@ -210,5 +243,7 @@ if (demo) {
   setInterval(loadDisplayConfig, 30000);
   loadStandbyState();
   setInterval(loadStandbyState, 20000);
+  loadCosts();
+  setInterval(loadCosts, 60000);
   startStream();
 }

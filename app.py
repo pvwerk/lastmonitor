@@ -43,6 +43,7 @@ CONFIG_PATH = os.path.join(BASE_DIR, "config.json")
 EXAMPLE_PATH = os.path.join(BASE_DIR, "config.example.json")
 STATIC_DIR = os.path.join(BASE_DIR, "static")
 BASELINE_PATH = os.path.join(BASE_DIR, "energy_baselines.json")
+COSTS_PATH = os.path.join(BASE_DIR, "daily_costs.json")
 
 _config_lock = threading.Lock()
 _config = {}
@@ -188,6 +189,108 @@ def standby_loop():
         except Exception:
             pass
         time.sleep(15)
+
+
+# --- Kosten (Verbrauch/Eigenverbrauch, Heute + Vortag) -----------------------
+# Läuft unabhängig von der Anzeige weiter (auch wenn "auf Anzeige zeigen" aus
+# ist) und integriert die Momentanleistungen selbst zu Tages-kWh, da das
+# PLEXLOG dafür keine eigenen Register liefert (anders als Tagesertrag/
+# -verbrauch, die direkt vom Gerät kommen). Eigenverbrauch = der Teil des
+# Verbrauchs, der aus eigener PV-Erzeugung gedeckt wird = min(Erzeugung,
+# Verbrauch) im Moment. Persistiert höchstens alle 60s (SD-Karten-Schonung),
+# nicht bei jedem Tick.
+_costs_lock = threading.Lock()
+_costs_state = {
+    "today": {"date": None, "verbrauch_kwh": 0.0, "eigenverbrauch_kwh": 0.0},
+    "prev": {"date": None, "verbrauch_kwh": 0.0, "eigenverbrauch_kwh": 0.0},
+}
+_costs_last_tick = None
+_costs_last_save = 0.0
+
+
+def _load_costs():
+    global _costs_state
+    try:
+        with open(COSTS_PATH, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        with _costs_lock:
+            if isinstance(data.get("today"), dict):
+                _costs_state["today"] = data["today"]
+            if isinstance(data.get("prev"), dict):
+                _costs_state["prev"] = data["prev"]
+    except Exception:
+        pass
+
+
+def _save_costs():
+    try:
+        with _costs_lock:
+            data = json.loads(json.dumps(_costs_state))
+        with open(COSTS_PATH, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False)
+    except Exception:
+        pass
+
+
+def _enrich_costs_day(d, bezug_eur_kwh, pv_eur_kwh):
+    v = float(d.get("verbrauch_kwh") or 0.0)
+    e = min(float(d.get("eigenverbrauch_kwh") or 0.0), v)
+    netzbezug = max(0.0, v - e)
+    out = dict(d)
+    out["verbrauch_kwh"] = round(v, 2)
+    out["eigenverbrauch_kwh"] = round(e, 2)
+    out["kosten_eur"] = round(netzbezug * bezug_eur_kwh + e * pv_eur_kwh, 2)
+    return out
+
+
+def costs_snapshot():
+    cfg = get_config()
+    cc = cfg.get("costs") or {}
+    bezug = float(cc.get("bezug_eur_kwh", 0) or 0)
+    pv = float(cc.get("pv_eur_kwh", 0) or 0)
+    with _costs_lock:
+        today = dict(_costs_state["today"])
+        prev = dict(_costs_state["prev"])
+    return {
+        "show_on_display": bool(cc.get("show_on_display")),
+        "bezug_eur_kwh": bezug,
+        "pv_eur_kwh": pv,
+        "today": _enrich_costs_day(today, bezug, pv),
+        "prev": _enrich_costs_day(prev, bezug, pv),
+    }
+
+
+def cost_loop():
+    global _costs_last_tick, _costs_last_save
+    _load_costs()
+    while True:
+        try:
+            now = time.time()
+            today_key = datetime.date.today().isoformat()
+            with _costs_lock:
+                if _costs_state["today"].get("date") != today_key:
+                    if _costs_state["today"].get("date") is not None:
+                        _costs_state["prev"] = dict(_costs_state["today"])
+                    _costs_state["today"] = {"date": today_key, "verbrauch_kwh": 0.0, "eigenverbrauch_kwh": 0.0}
+                    _costs_last_tick = now  # kein Integrations-Sprung über den Tageswechsel hinweg
+            snap = reading.snapshot()
+            cons = snap.get("consumption_kw")
+            prod = snap.get("production_kw")
+            if _costs_last_tick is not None and cons is not None:
+                # Bei Ausreißern (z. B. nach Verbindungsausfall) die Zeitspanne kappen,
+                # statt einen künstlich hohen kWh-Sprung zu verbuchen.
+                dt_h = max(0.0, min(now - _costs_last_tick, 120.0)) / 3600.0
+                eigen_kw = max(0.0, min(prod or 0.0, cons))
+                with _costs_lock:
+                    _costs_state["today"]["verbrauch_kwh"] = float(_costs_state["today"].get("verbrauch_kwh") or 0.0) + max(0.0, cons) * dt_h
+                    _costs_state["today"]["eigenverbrauch_kwh"] = float(_costs_state["today"].get("eigenverbrauch_kwh") or 0.0) + eigen_kw * dt_h
+            _costs_last_tick = now
+            if now - _costs_last_save > 60:
+                _save_costs()
+                _costs_last_save = now
+        except Exception:
+            pass
+        time.sleep(5)
 
 
 def compute_status(snapshot, cfg):
@@ -564,11 +667,13 @@ def _startup():
     threading.Thread(target=sms_monitor_loop, daemon=True).start()
     threading.Thread(target=remote_report_loop, daemon=True).start()
     threading.Thread(target=standby_loop, daemon=True).start()
+    threading.Thread(target=cost_loop, daemon=True).start()
 
 
 @app.on_event("shutdown")
 def _shutdown():
     poller.stop()
+    _save_costs()
 
 
 @app.get("/")
@@ -598,6 +703,11 @@ def api_standby_state():
         "today_window": {"on": window[0], "off": window[1]} if window else None,
         "last_check": _standby_state.get("last_check"),
     })
+
+
+@app.get("/api/costs")
+def api_costs():
+    return JSONResponse(costs_snapshot())
 
 
 @app.get("/api/remote-report/status")

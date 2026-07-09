@@ -1,6 +1,7 @@
 venv/
 config.json
 energy_baselines.json
+daily_costs.json
 __pycache__/
 *.pyc
 .DS_Store

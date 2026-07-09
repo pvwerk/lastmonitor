@@ -42,11 +42,36 @@
       <div class="status" id="status">Verbinde …</div>
     </section>
 
-    <!-- RECHTS OBEN: Erzeugung -->
+    <!-- RECHTS OBEN (Standard): Erzeugung -->
     <section class="erzeugung">
       <div class="block-title">Erzeugung (PV)</div>
       <div class="big-metric">
         <span class="big-val" id="prod">–</span><span class="big-unit">kW</span>
+      </div>
+    </section>
+
+    <!-- LINKS UNTEN (nur bei aktivierter Kosten-Anzeige): Erzeugung, klein -->
+    <section class="erzeugung-mini">
+      <div class="block-title">Erzeugung (PV)</div>
+      <div class="mini-metric">
+        <span class="mini-val" id="prodMini">–</span><span class="mini-unit">kW</span>
+      </div>
+    </section>
+
+    <!-- RECHTS OBEN (nur bei aktivierter Kosten-Anzeige): Kosten Heute/Vortag -->
+    <section class="costs">
+      <div class="block-title">Kosten</div>
+      <div class="cost-card">
+        <div class="cost-card-title">Heute</div>
+        <div class="cost-row"><span>Verbrauch</span><b id="costTodayVerbrauch">– kWh</b></div>
+        <div class="cost-row"><span>Eigenverbrauch</span><b id="costTodayEigen">– kWh</b></div>
+        <div class="cost-row total"><span>Kosten</span><b id="costTodayKosten">– €</b></div>
+      </div>
+      <div class="cost-card">
+        <div class="cost-card-title">Vortag</div>
+        <div class="cost-row"><span>Verbrauch</span><b id="costPrevVerbrauch">– kWh</b></div>
+        <div class="cost-row"><span>Eigenverbrauch</span><b id="costPrevEigen">– kWh</b></div>
+        <div class="cost-row total"><span>Kosten</span><b id="costPrevKosten">– €</b></div>
       </div>
     </section>
 

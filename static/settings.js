@@ -128,6 +128,11 @@ function collect() {
         days: collectStandbyDays(),
       },
     },
+    costs: {
+      show_on_display: $("costs_show_on_display").checked,
+      bezug_eur_kwh: numOrNull($("costs_bezug").value) ?? 0.35,
+      pv_eur_kwh: numOrNull($("costs_pv").value) ?? 0.10,
+    },
     sms: {
       enabled: $("sms_enabled").checked,
       provider: "seven",
@@ -144,7 +149,7 @@ function collect() {
 }
 
 function apply(cfg) {
-  const m = cfg.modbus || {}, r = m.registers || {}, l = cfg.limits || {}, d = cfg.display || {}, s = cfg.sms || {};
+  const m = cfg.modbus || {}, r = m.registers || {}, l = cfg.limits || {}, d = cfg.display || {}, s = cfg.sms || {}, co = cfg.costs || {};
   _loadedRegisters = Object.assign({}, r);
   $("profile").value = m.profile || "nativ";
   $("host").value = m.host || "";
@@ -173,6 +178,9 @@ function apply(cfg) {
   const sb = d.standby || {};
   $("standby_enabled").checked = !!sb.enabled;
   renderStandbyDays(sb.days);
+  $("costs_show_on_display").checked = !!co.show_on_display;
+  $("costs_bezug").value = co.bezug_eur_kwh ?? 0.35;
+  $("costs_pv").value = co.pv_eur_kwh ?? 0.10;
   $("sms_enabled").checked = !!s.enabled;
   $("sms_api_key").value = s.api_key || "";
   $("sms_sender").value = s.sender || "Lastmonitor";
@@ -252,11 +260,26 @@ async function loadStandbyStatus() {
   } catch (e) { /* Status ist nur Zusatzinfo, still ignorieren */ }
 }
 
+async function loadCostsStatus() {
+  try {
+    const r = await fetch("/api/costs");
+    const c = await r.json();
+    const eur = (v) => (v === null || v === undefined) ? "–" : v.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " €";
+    const kwh = (v) => (v === null || v === undefined) ? "–" : v.toLocaleString("de-DE", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + " kWh";
+    const t = c.today || {}, p = c.prev || {};
+    $("costsStatus").textContent =
+      `Heute: Verbrauch ${kwh(t.verbrauch_kwh)} · Eigenverbrauch ${kwh(t.eigenverbrauch_kwh)} · Kosten ${eur(t.kosten_eur)}` +
+      `  ·  Vortag: Verbrauch ${kwh(p.verbrauch_kwh)} · Eigenverbrauch ${kwh(p.eigenverbrauch_kwh)} · Kosten ${eur(p.kosten_eur)}`;
+  } catch (e) { /* Status ist nur Zusatzinfo, still ignorieren */ }
+}
+
 // ---- Laden / Speichern / Test ----------------------------------------------
 async function load() {
   try { const r = await fetch("/api/config"); apply(await r.json()); }
   catch (e) { setMsg("saveMsg", "Konfiguration konnte nicht geladen werden: " + e, false); }
   loadStandbyStatus();
+  loadCostsStatus();
+  setInterval(loadCostsStatus, 30000);
 }
 
 $("profile").addEventListener("change", () => applyProfile($("profile").value));
@@ -270,6 +293,7 @@ $("btnSave").addEventListener("click", async () => {
     const res = await r.json();
     setMsg("saveMsg", res.ok ? "✓ Gespeichert. Die Anzeige übernimmt die Werte automatisch." : "Fehler beim Speichern.", !!res.ok);
     setTimeout(loadStandbyStatus, 1000);
+    setTimeout(loadCostsStatus, 1000);
   } catch (e) { setMsg("saveMsg", "Fehler: " + e, false); }
 });
 

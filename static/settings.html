@@ -169,12 +169,25 @@
 
     <div class="card">
       <h2>Standby-Zeitfenster</h2>
-      <p class="hint" style="margin-bottom:12px">Außerhalb des Zeitfensters schaltet der Bildschirm
-        per DPMS wirklich ab (kein Dauerlicht in der Küche) – kein schwarzes Bild, sondern echtes
-        Standby des Monitors. Ohne Aktivierung läuft der Bildschirm wie bisher durchgehend.</p>
+      <p class="hint" style="margin-bottom:12px">Außerhalb des Zeitfensters dunkelt die Anzeige
+        komplett ab (kein Licht in der Küche). Ohne Aktivierung läuft der Bildschirm wie bisher durchgehend.</p>
       <div class="field toggle"><input id="standby_enabled" type="checkbox" /><label style="margin:0">Standby-Zeitfenster aktiviert</label></div>
       <div id="standbyDays"></div>
       <div id="standbyStatus" class="hint" style="margin-top:8px"></div>
+    </div>
+
+    <div class="card">
+      <h2>Kosten (Verbrauch / Eigenverbrauch)</h2>
+      <p class="hint" style="margin-bottom:12px">Verbrauch und Eigenverbrauch (aus eigener PV-Erzeugung
+        gedeckter Anteil) werden laufend im Hintergrund mitgezählt und daraus die Kosten berechnet –
+        unabhängig davon, ob das unten auf der Küchen-Anzeige zu sehen ist. „Heute" aktualisiert sich
+        dort alle 60 Sekunden.</p>
+      <div class="field toggle"><input id="costs_show_on_display" type="checkbox" /><label style="margin:0">Auf der Küchen-Anzeige zeigen (Erzeugung wandert dafür klein nach links unten)</label></div>
+      <div class="row">
+        <div class="field"><label>Bezugskosten (€/kWh)</label><input id="costs_bezug" type="number" step="0.01" min="0" value="0.35" /></div>
+        <div class="field"><label>PV-Strom-Kosten (€/kWh)</label><input id="costs_pv" type="number" step="0.01" min="0" value="0.10" /></div>
+      </div>
+      <div id="costsStatus" class="hint" style="margin-top:8px"></div>
     </div>
 
     <div class="btns">

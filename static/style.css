@@ -76,13 +76,22 @@ body.crit .ring { animation: ringpulse 1s infinite; }
 .layout.costs-on { grid-template-rows: 2fr 1fr; }
 .layout.costs-on .netz { grid-row: 1; border-right: none; }
 .layout.costs-on .erzeugung { display: none; }
-.layout.costs-on .erzeugung-mini { display: flex; flex-direction: row; align-items: center; justify-content: space-between; }
+.layout.costs-on .erzeugung-mini { display: flex; flex-direction: column; }
 .layout.costs-on .costs { display: flex; }
 .layout.costs-on .energy { grid-row: 2; }
 
-.mini-metric { display: flex; align-items: baseline; gap: .6vw; }
+/* Erzeugung, klein (Kosten-Anzeige an): Überschrift mittig über beiden
+   Hälften, darunter Zahl links / Diagramm rechts – vertikal geteilt. */
+.mini-title-centered { text-align: center; }
+.mini-body { flex: 1; display: flex; flex-direction: row; align-items: center; gap: 1.4vw; min-height: 0; }
+.mini-metric { flex: 0 0 auto; display: flex; align-items: baseline; gap: .6vw; }
 .mini-val { font-size: 5.4vh; font-weight: 800; line-height: 1; color: var(--pv); }
 .mini-unit { font-size: 2.2vh; color: var(--muted); }
+.prod-chart-mini { flex: 1; height: 100%; min-width: 0; display: block; }
+
+/* Erzeugung, groß (Standard, ohne Kosten-Anzeige): Zahl bleibt wie gehabt,
+   Diagramm kommt darunter statt daneben – siehe .big-metric-Override unten. */
+.prod-chart { flex: 1; min-height: 0; width: 100%; margin-top: 1vh; display: block; }
 
 .cost-card {
   flex: 1; background: #111a2e; border: 1px solid #1e293b; border-radius: 14px;
@@ -145,8 +154,9 @@ body.crit .ring { animation: ringpulse 1s infinite; }
 .status { font-size: 2vh; color: var(--muted); min-height: 2.4vh; }
 .status.err { color: var(--critical); font-weight: 700; }
 
-/* ---- Erzeugung (großes Feld) ---- */
-.big-metric { flex: 1; display: flex; align-items: center; justify-content: center; gap: 1vw; }
+/* ---- Erzeugung (großes Feld) – Zahl behält ihre Größe, Diagramm (.prod-chart)
+   nimmt darunter den übrigen Platz ein statt die Zahl mittig zu strecken. ---- */
+.big-metric { flex: 0 0 auto; display: flex; align-items: center; justify-content: center; gap: 1vw; padding-top: 1vh; }
 .big-val { font-size: 12vh; font-weight: 800; line-height: 1; color: var(--pv); }
 .big-unit { font-size: 4vh; color: var(--muted); }
 

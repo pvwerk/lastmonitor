@@ -42,19 +42,24 @@
       <div class="status" id="status">Verbinde …</div>
     </section>
 
-    <!-- RECHTS OBEN (Standard): Erzeugung -->
+    <!-- RECHTS OBEN (Standard): Erzeugung – Zahl oben, Diagramm darunter -->
     <section class="erzeugung">
       <div class="block-title">Erzeugung (PV)</div>
       <div class="big-metric">
-        <span class="big-val" id="prod">–</span><span class="big-unit">kW</span>
+        <span class="big-val" id="prod">–</span><span class="big-unit" id="prodUnit">kW</span>
       </div>
+      <canvas id="prodChart" class="prod-chart"></canvas>
     </section>
 
-    <!-- LINKS UNTEN (nur bei aktivierter Kosten-Anzeige): Erzeugung, klein -->
+    <!-- LINKS UNTEN (nur bei aktivierter Kosten-Anzeige): Erzeugung, klein,
+         Überschrift mittig, darunter Zahl links / Diagramm rechts -->
     <section class="erzeugung-mini">
-      <div class="block-title">Erzeugung (PV)</div>
-      <div class="mini-metric">
-        <span class="mini-val" id="prodMini">–</span><span class="mini-unit">kW</span>
+      <div class="block-title mini-title-centered">Erzeugung (PV)</div>
+      <div class="mini-body">
+        <div class="mini-metric">
+          <span class="mini-val" id="prodMini">–</span><span class="mini-unit" id="prodMiniUnit">kW</span>
+        </div>
+        <canvas id="prodChartMini" class="prod-chart-mini"></canvas>
       </div>
     </section>
 

@@ -28,6 +28,10 @@ const el = {
   overlaySub: document.getElementById("overlaySub"),
   standbyOverlay: document.getElementById("standbyOverlay"),
   prodMini: document.getElementById("prodMini"),
+  prodUnit: document.getElementById("prodUnit"),
+  prodMiniUnit: document.getElementById("prodMiniUnit"),
+  prodChart: document.getElementById("prodChart"),
+  prodChartMini: document.getElementById("prodChartMini"),
   costTodayVerbrauch: document.getElementById("costTodayVerbrauch"),
   costTodayEigen: document.getElementById("costTodayEigen"),
   costTodayKosten: document.getElementById("costTodayKosten"),
@@ -44,6 +48,85 @@ function fmt(v, digits = 1) {
   if (v === null || v === undefined || Number.isNaN(v)) return "–";
   return Number(v).toLocaleString("de-DE", { minimumFractionDigits: digits, maximumFractionDigits: digits });
 }
+
+// Erzeugung: unter 10 kW in Watt (ohne Nachkommastellen), sonst kW mit 2 Nachkommastellen.
+function fmtProduction(kw) {
+  if (kw === null || kw === undefined) return { text: "–", unit: "kW" };
+  const v = Math.max(0, kw);
+  if (v < 10) {
+    return { text: Math.round(v * 1000).toLocaleString("de-DE"), unit: "W" };
+  }
+  return { text: fmt(v, 2), unit: "kW" };
+}
+
+// --- Erzeugungs-Diagramm (Verlauf, Canvas) -----------------------------------
+const PROD_HISTORY_MAX = 60;
+let prodHistory = [];
+const PROD_CHART_COLOR = "#f5b50a"; // == --pv in style.css
+
+function drawProdChart(canvas) {
+  if (!canvas) return;
+  const rect = canvas.getBoundingClientRect();
+  if (rect.width < 4 || rect.height < 4) return; // (noch) nicht sichtbar
+  const dpr = window.devicePixelRatio || 1;
+  const w = Math.max(1, Math.round(rect.width * dpr));
+  const h = Math.max(1, Math.round(rect.height * dpr));
+  if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
+  const ctx = canvas.getContext("2d");
+  ctx.clearRect(0, 0, w, h);
+
+  const data = prodHistory;
+  if (data.length < 2) return;
+  const known = data.filter((v) => v !== null && v !== undefined);
+  const max = Math.max(0.1, ...(known.length ? known : [0]));
+  const pad = 3 * dpr;
+  const xStep = (w - pad * 2) / (data.length - 1);
+  const xFor = (i) => pad + i * xStep;
+  const yFor = (v) => h - pad - (v / max) * (h - pad * 2);
+
+  // Flächenfüllung unter der Linie
+  ctx.beginPath();
+  ctx.moveTo(xFor(0), h);
+  data.forEach((v, i) => ctx.lineTo(xFor(i), v == null ? h : yFor(v)));
+  ctx.lineTo(xFor(data.length - 1), h);
+  ctx.closePath();
+  const grad = ctx.createLinearGradient(0, 0, 0, h);
+  grad.addColorStop(0, PROD_CHART_COLOR + "50");
+  grad.addColorStop(1, PROD_CHART_COLOR + "05");
+  ctx.fillStyle = grad;
+  ctx.fill();
+
+  // Linie
+  ctx.beginPath();
+  let started = false;
+  data.forEach((v, i) => {
+    if (v === null || v === undefined) return;
+    const px = xFor(i), py = yFor(v);
+    if (!started) { ctx.moveTo(px, py); started = true; } else { ctx.lineTo(px, py); }
+  });
+  ctx.strokeStyle = PROD_CHART_COLOR;
+  ctx.lineWidth = 2 * dpr;
+  ctx.lineJoin = "round";
+  ctx.lineCap = "round";
+  ctx.stroke();
+
+  // aktueller Punkt (letzter Wert)
+  for (let i = data.length - 1; i >= 0; i--) {
+    if (data[i] === null || data[i] === undefined) continue;
+    ctx.beginPath();
+    ctx.arc(xFor(i), yFor(data[i]), 3 * dpr, 0, Math.PI * 2);
+    ctx.fillStyle = PROD_CHART_COLOR;
+    ctx.fill();
+    break;
+  }
+}
+
+function drawProdCharts() {
+  drawProdChart(el.prodChart);
+  drawProdChart(el.prodChartMini);
+}
+
+window.addEventListener("resize", drawProdCharts);
 
 function render(state) {
   const level = state.level || "offline";
@@ -79,10 +162,16 @@ function render(state) {
   }
 
   // Erzeugung (großes Feld + ggf. kleines Feld bei aktivierter Kosten-Anzeige)
-  const prodText = (state.production_kw === null || state.production_kw === undefined)
-    ? "–" : fmt(Math.max(0, state.production_kw), 1);
-  el.prod.textContent = prodText;
-  el.prodMini.textContent = prodText;
+  const prodFmt = fmtProduction(state.production_kw);
+  el.prod.textContent = prodFmt.text;
+  el.prodUnit.textContent = prodFmt.unit;
+  el.prodMini.textContent = prodFmt.text;
+  el.prodMiniUnit.textContent = prodFmt.unit;
+
+  // Verlaufsdiagramm der Erzeugung
+  prodHistory.push((state.production_kw === null || state.production_kw === undefined) ? null : Math.max(0, state.production_kw));
+  if (prodHistory.length > PROD_HISTORY_MAX) prodHistory.shift();
+  drawProdCharts();
 
   // Energie (Tag / Woche / Monat)
   const kwh = (v) => (v === null || v === undefined) ? "– kWh" : fmt(v, 1) + " kWh";
@@ -168,6 +257,7 @@ async function loadCosts() {
     el.costPrevVerbrauch.textContent = kwhVal(p.verbrauch_kwh);
     el.costPrevEigen.textContent = kwhVal(p.eigenverbrauch_kwh);
     el.costPrevKosten.textContent = euro(p.kosten_eur);
+    setTimeout(drawProdCharts, 50); // neu sichtbares Diagramm sofort zeichnen (Layout-Umschaltung)
   } catch (e) { /* ignore, alte Werte bleiben stehen */ }
 }
 

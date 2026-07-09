@@ -43,4 +43,5 @@ exec "$CHROME" \
   --disable-pinch \
   --overscroll-history-navigation=0 \
   --check-for-update-interval=31536000 \
+  --password-store=basic \
   "$URL"

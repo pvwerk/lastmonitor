@@ -44,6 +44,7 @@ WorkingDirectory=$APP_DIR
 ExecStart=$APP_DIR/venv/bin/uvicorn app:app --host 0.0.0.0 --port 8000
 Restart=always
 RestartSec=3
+TimeoutStopSec=10
 
 [Install]
 WantedBy=multi-user.target

@@ -5,10 +5,13 @@ set -u
 
 URL="http://localhost:8000/"
 
-# Bildschirmschoner / Energiesparen aus (nur unter X verfügbar)
+# Bildschirmschoner aus, DPMS aber aktiv lassen (nur Auto-Timer aus) – der
+# Lastmonitor-Dienst schaltet den Monitor sonst per konfigurierbarem
+# Standby-Zeitfenster (Einstellungen) selbst per "xset dpms force" ab/an.
 xset s off 2>/dev/null || true
-xset -dpms 2>/dev/null || true
 xset s noblank 2>/dev/null || true
+xset +dpms 2>/dev/null || true
+xset dpms 0 0 0 2>/dev/null || true
 
 # Mauszeiger ausblenden
 ( command -v unclutter >/dev/null && unclutter -idle 0.5 -root & ) 2>/dev/null || true

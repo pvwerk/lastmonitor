@@ -21,6 +21,7 @@ Standort (anderes Netzwerk) aus der Ferne diagnostizierbar bleibt.
 """
 import json
 import os
+import pwd
 import re
 import sys
 import subprocess
@@ -123,6 +124,96 @@ def energy_periods(gesamtertrag, gesamtverbrauch):
     out["month_ertrag"] = delta(gesamtertrag, b["month"].get("ge"))
     out["month_verbrauch"] = delta(gesamtverbrauch, b["month"].get("gv"))
     return out
+
+
+# --- Standby-Zeitfenster (Bildschirm per DPMS AN/AUS je Wochentag) -----------
+# Läuft als eigener Hintergrund-Thread und schaltet den angeschlossenen Monitor
+# per `xset dpms force on/off` tatsächlich ab (nicht nur ein schwarzes Bild) –
+# der Dienst läuft headless (systemd), daher DISPLAY/XAUTHORITY der Desktop-
+# Sitzung (gleicher Linux-User) explizit setzen.
+WEEKDAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+
+_standby_state = {"applied_on": None, "should_be_on": None, "last_check": None, "last_error": None}
+
+
+def _resolve_standby_window(days, weekday_idx, _depth=0):
+    """Folgt 'same_as_prev'-Ketten rückwärts (zyklisch über die Woche, max. 7 Schritte)."""
+    if _depth > 7:
+        return None
+    key = WEEKDAYS[weekday_idx % 7]
+    rec = (days or {}).get(key) or {}
+    if rec.get("same_as_prev"):
+        return _resolve_standby_window(days, weekday_idx - 1, _depth + 1)
+    on, off = rec.get("on"), rec.get("off")
+    if not on or not off:
+        return None
+    return on, off
+
+
+def _parse_hm(s):
+    try:
+        h, m = str(s).split(":")
+        return int(h) * 60 + int(m)
+    except Exception:
+        return None
+
+
+def standby_is_on_now(cfg, now=None):
+    """True = Bildschirm soll AN sein. Bei deaktiviertem Feature oder kaputter/fehlender
+    Konfiguration bewusst immer True – Ausfallsicher (lieber dauerhaft an als versehentlich aus)."""
+    sb = ((cfg.get("display") or {}).get("standby")) or {}
+    if not sb.get("enabled"):
+        return True
+    now = now or datetime.datetime.now()
+    window = _resolve_standby_window(sb.get("days"), now.weekday())
+    if not window:
+        return True
+    on_m, off_m = _parse_hm(window[0]), _parse_hm(window[1])
+    if on_m is None or off_m is None or on_m == off_m:
+        return True
+    cur_m = now.hour * 60 + now.minute
+    if on_m < off_m:
+        return on_m <= cur_m < off_m
+    return cur_m >= on_m or cur_m < off_m  # Fenster über Mitternacht
+
+
+def _x_env():
+    try:
+        home = pwd.getpwuid(os.getuid()).pw_dir
+    except Exception:
+        home = os.path.expanduser("~")
+    env = dict(os.environ)
+    env["DISPLAY"] = ":0"
+    env["XAUTHORITY"] = os.path.join(home, ".Xauthority")
+    return env
+
+
+def _apply_dpms(on):
+    try:
+        subprocess.run(
+            ["xset", "-display", ":0", "dpms", "force", "on" if on else "off"],
+            env=_x_env(), timeout=5, capture_output=True, check=False,
+        )
+        return True
+    except Exception as e:
+        _standby_state["last_error"] = str(e)
+        return False
+
+
+def standby_loop():
+    while True:
+        try:
+            cfg = get_config()
+            desired = standby_is_on_now(cfg)
+            _standby_state["should_be_on"] = desired
+            _standby_state["last_check"] = time.time()
+            if desired != _standby_state["applied_on"]:
+                if _apply_dpms(desired):
+                    _standby_state["applied_on"] = desired
+                    _standby_state["last_error"] = None
+        except Exception as e:
+            _standby_state["last_error"] = str(e)
+        time.sleep(20)
 
 
 def compute_status(snapshot, cfg):
@@ -498,6 +589,7 @@ def _startup():
     poller.start()
     threading.Thread(target=sms_monitor_loop, daemon=True).start()
     threading.Thread(target=remote_report_loop, daemon=True).start()
+    threading.Thread(target=standby_loop, daemon=True).start()
 
 
 @app.on_event("shutdown")
@@ -518,6 +610,22 @@ def settings_page():
 @app.get("/api/state")
 def api_state():
     return JSONResponse(compute_status(reading.snapshot(), get_config()))
+
+
+@app.get("/api/standby-state")
+def api_standby_state():
+    cfg = get_config()
+    sb = (cfg.get("display") or {}).get("standby") or {}
+    now = datetime.datetime.now()
+    window = _resolve_standby_window(sb.get("days"), now.weekday()) if sb.get("enabled") else None
+    return JSONResponse({
+        "enabled": bool(sb.get("enabled")),
+        "should_be_on": _standby_state.get("should_be_on"),
+        "applied_on": _standby_state.get("applied_on"),
+        "today_window": {"on": window[0], "off": window[1]} if window else None,
+        "last_check": _standby_state.get("last_check"),
+        "last_error": _standby_state.get("last_error"),
+    })
 
 
 @app.get("/api/remote-report/status")

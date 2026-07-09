@@ -38,7 +38,19 @@
   "display": {
     "title": "Netzbezug",
     "warn_text": "Achtung – Leistung beobachten",
-    "critical_text": "STROM REDUZIEREN!"
+    "critical_text": "STROM REDUZIEREN!",
+    "standby": {
+      "enabled": false,
+      "days": {
+        "mon": { "on": "06:00", "off": "23:00", "same_as_prev": false },
+        "tue": { "on": "06:00", "off": "23:00", "same_as_prev": true },
+        "wed": { "on": "06:00", "off": "23:00", "same_as_prev": true },
+        "thu": { "on": "06:00", "off": "23:00", "same_as_prev": true },
+        "fri": { "on": "06:00", "off": "23:00", "same_as_prev": true },
+        "sat": { "on": "07:00", "off": "23:59", "same_as_prev": false },
+        "sun": { "on": "07:00", "off": "22:00", "same_as_prev": true }
+      }
+    }
   },
   "sms": {
     "enabled": false,

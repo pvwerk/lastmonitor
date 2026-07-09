@@ -123,6 +123,10 @@ function collect() {
       title: $("d_title").value,
       warn_text: $("d_warn_text").value,
       critical_text: $("d_critical_text").value,
+      standby: {
+        enabled: $("standby_enabled").checked,
+        days: collectStandbyDays(),
+      },
     },
     sms: {
       enabled: $("sms_enabled").checked,
@@ -166,6 +170,9 @@ function apply(cfg) {
   $("d_warn_text").value = d.warn_text ?? "Achtung – Leistung beobachten";
   $("d_critical_text").value = d.critical_text ?? "STROM REDUZIEREN!";
   $("poll_interval_s").value = cfg.poll_interval_s ?? 1;
+  const sb = d.standby || {};
+  $("standby_enabled").checked = !!sb.enabled;
+  renderStandbyDays(sb.days);
   $("sms_enabled").checked = !!s.enabled;
   $("sms_api_key").value = s.api_key || "";
   $("sms_sender").value = s.sender || "Lastmonitor";
@@ -198,10 +205,58 @@ function updateVisibility() {
   $("totalField").style.display = mode === "analyzer" ? "none" : "";
 }
 
+// ---- Standby-Zeitfenster -----------------------------------------------------
+const WEEKDAY_KEYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
+const WEEKDAY_LABELS = { mon: "Montag", tue: "Dienstag", wed: "Mittwoch", thu: "Donnerstag", fri: "Freitag", sat: "Samstag", sun: "Sonntag" };
+
+function standbyDayRowHtml(key, rec) {
+  rec = rec || {};
+  const same = !!rec.same_as_prev;
+  return `<div class="row standby-day" data-day="${key}" style="align-items:end;flex-wrap:wrap">
+    <div class="field" style="flex:0 0 100px"><label>${WEEKDAY_LABELS[key]}</label></div>
+    <div class="field" style="flex:0 0 130px"><label>AN von</label><input class="sd-on" type="time" value="${esc(rec.on || "06:00")}" ${same ? "disabled" : ""} /></div>
+    <div class="field" style="flex:0 0 130px"><label>bis</label><input class="sd-off" type="time" value="${esc(rec.off || "22:00")}" ${same ? "disabled" : ""} /></div>
+    <div class="field toggle" style="flex:0 0 130px"><input class="sd-same" type="checkbox" ${same ? "checked" : ""} /><label style="margin:0">wie Vortag</label></div>
+  </div>`;
+}
+function renderStandbyDays(days) {
+  const el = $("standbyDays");
+  el.innerHTML = WEEKDAY_KEYS.map(k => standbyDayRowHtml(k, (days || {})[k])).join("");
+  el.querySelectorAll(".standby-day").forEach(row => {
+    const same = row.querySelector(".sd-same");
+    const on = row.querySelector(".sd-on"), off = row.querySelector(".sd-off");
+    same.addEventListener("change", () => { on.disabled = off.disabled = same.checked; });
+  });
+}
+function collectStandbyDays() {
+  const out = {};
+  document.querySelectorAll(".standby-day").forEach(row => {
+    out[row.dataset.day] = {
+      on: row.querySelector(".sd-on").value || "06:00",
+      off: row.querySelector(".sd-off").value || "22:00",
+      same_as_prev: row.querySelector(".sd-same").checked,
+    };
+  });
+  return out;
+}
+async function loadStandbyStatus() {
+  try {
+    const r = await fetch("/api/standby-state");
+    const s = await r.json();
+    let txt = s.enabled
+      ? (s.should_be_on ? "Aktuell: Bildschirm AN" : "Aktuell: Bildschirm AUS (Standby)")
+      : "Standby-Zeitfenster ist deaktiviert – Bildschirm läuft durchgehend.";
+    if (s.today_window) txt += ` · heutiges Fenster: ${s.today_window.on}–${s.today_window.off} Uhr`;
+    if (s.last_error) txt += ` · Fehler: ${s.last_error}`;
+    $("standbyStatus").textContent = txt;
+  } catch (e) { /* Status ist nur Zusatzinfo, still ignorieren */ }
+}
+
 // ---- Laden / Speichern / Test ----------------------------------------------
 async function load() {
   try { const r = await fetch("/api/config"); apply(await r.json()); }
   catch (e) { setMsg("saveMsg", "Konfiguration konnte nicht geladen werden: " + e, false); }
+  loadStandbyStatus();
 }
 
 $("profile").addEventListener("change", () => applyProfile($("profile").value));
@@ -214,6 +269,7 @@ $("btnSave").addEventListener("click", async () => {
     const r = await fetch("/api/config", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(collect()) });
     const res = await r.json();
     setMsg("saveMsg", res.ok ? "✓ Gespeichert. Die Anzeige übernimmt die Werte automatisch." : "Fehler beim Speichern.", !!res.ok);
+    setTimeout(loadStandbyStatus, 1000);
   } catch (e) { setMsg("saveMsg", "Fehler: " + e, false); }
 });
 

@@ -44,6 +44,7 @@ EXAMPLE_PATH = os.path.join(BASE_DIR, "config.example.json")
 STATIC_DIR = os.path.join(BASE_DIR, "static")
 BASELINE_PATH = os.path.join(BASE_DIR, "energy_baselines.json")
 COSTS_PATH = os.path.join(BASE_DIR, "daily_costs.json")
+PEAKS_PATH = os.path.join(BASE_DIR, "peak_stats.json")
 
 _config_lock = threading.Lock()
 _config = {}
@@ -260,22 +261,81 @@ def costs_snapshot():
     }
 
 
+_peaks_lock = threading.Lock()
+_peaks_state = {
+    "today": {"date": None, "peak_kw": 0.0},
+    "year": {"year": None, "peak_kw": 0.0},
+}
+
+
+def _load_peaks():
+    global _peaks_state
+    try:
+        with open(PEAKS_PATH, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        with _peaks_lock:
+            if isinstance(data.get("today"), dict):
+                _peaks_state["today"] = data["today"]
+            if isinstance(data.get("year"), dict):
+                _peaks_state["year"] = data["year"]
+    except Exception:
+        pass
+
+
+def _save_peaks():
+    try:
+        with _peaks_lock:
+            data = json.loads(json.dumps(_peaks_state))
+        with open(PEAKS_PATH, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False)
+    except Exception:
+        pass
+
+
+def peak_snapshot():
+    """Heutige Spitzenlast, Jahresspitze (jeweils Netzbezug, nicht Einspeisung)
+    + durchschnittlicher Verbrauch heute (aus den Kosten-kWh abgeleitet, ohne
+    eigene Integration)."""
+    now_dt = datetime.datetime.now()
+    midnight = now_dt.replace(hour=0, minute=0, second=0, microsecond=0)
+    elapsed_h = max((now_dt - midnight).total_seconds() / 3600.0, 0.01)
+    with _costs_lock:
+        verbrauch_heute = float(_costs_state["today"].get("verbrauch_kwh") or 0.0)
+    with _peaks_lock:
+        today_peak = round(float(_peaks_state["today"].get("peak_kw") or 0.0), 2)
+        year_peak = round(float(_peaks_state["year"].get("peak_kw") or 0.0), 2)
+    return {
+        "today_peak_kw": today_peak,
+        "year_peak_kw": year_peak,
+        "today_avg_kw": round(verbrauch_heute / elapsed_h, 2),
+    }
+
+
 def cost_loop():
     global _costs_last_tick, _costs_last_save
     _load_costs()
+    _load_peaks()
     while True:
         try:
             now = time.time()
-            today_key = datetime.date.today().isoformat()
+            now_dt = datetime.datetime.now()
+            today_key = now_dt.date().isoformat()
+            year_key = now_dt.year
             with _costs_lock:
                 if _costs_state["today"].get("date") != today_key:
                     if _costs_state["today"].get("date") is not None:
                         _costs_state["prev"] = dict(_costs_state["today"])
                     _costs_state["today"] = {"date": today_key, "verbrauch_kwh": 0.0, "eigenverbrauch_kwh": 0.0}
                     _costs_last_tick = now  # kein Integrations-Sprung über den Tageswechsel hinweg
+            with _peaks_lock:
+                if _peaks_state["today"].get("date") != today_key:
+                    _peaks_state["today"] = {"date": today_key, "peak_kw": 0.0}
+                if _peaks_state["year"].get("year") != year_key:
+                    _peaks_state["year"] = {"year": year_key, "peak_kw": 0.0}
             snap = reading.snapshot()
             cons = snap.get("consumption_kw")
             prod = snap.get("production_kw")
+            grid = snap.get("power_kw")
             if _costs_last_tick is not None and cons is not None:
                 # Bei Ausreißern (z. B. nach Verbindungsausfall) die Zeitspanne kappen,
                 # statt einen künstlich hohen kWh-Sprung zu verbuchen.
@@ -285,8 +345,16 @@ def cost_loop():
                     _costs_state["today"]["verbrauch_kwh"] = float(_costs_state["today"].get("verbrauch_kwh") or 0.0) + max(0.0, cons) * dt_h
                     _costs_state["today"]["eigenverbrauch_kwh"] = float(_costs_state["today"].get("eigenverbrauch_kwh") or 0.0) + eigen_kw * dt_h
             _costs_last_tick = now
+            if grid is not None:
+                load_kw = max(0.0, grid)  # nur Netzbezug zählt als "Last", nicht Einspeisung
+                with _peaks_lock:
+                    if load_kw > float(_peaks_state["today"].get("peak_kw") or 0.0):
+                        _peaks_state["today"]["peak_kw"] = load_kw
+                    if load_kw > float(_peaks_state["year"].get("peak_kw") or 0.0):
+                        _peaks_state["year"]["peak_kw"] = load_kw
             if now - _costs_last_save > 60:
                 _save_costs()
+                _save_peaks()
                 _costs_last_save = now
         except Exception:
             pass
@@ -674,6 +742,7 @@ def _startup():
 def _shutdown():
     poller.stop()
     _save_costs()
+    _save_peaks()
 
 
 @app.get("/")
@@ -708,6 +777,11 @@ def api_standby_state():
 @app.get("/api/costs")
 def api_costs():
     return JSONResponse(costs_snapshot())
+
+
+@app.get("/api/peaks")
+def api_peaks():
+    return JSONResponse(peak_snapshot())
 
 
 # --- Auto-Reload der Kiosk-Anzeige nach Einstellungs-Änderungen --------------

@@ -38,6 +38,9 @@ const el = {
   costPrevVerbrauch: document.getElementById("costPrevVerbrauch"),
   costPrevEigen: document.getElementById("costPrevEigen"),
   costPrevKosten: document.getElementById("costPrevKosten"),
+  peakToday: document.getElementById("peakToday"),
+  peakAvg: document.getElementById("peakAvg"),
+  peakYear: document.getElementById("peakYear"),
 };
 
 let costsEnabled = false;
@@ -59,10 +62,47 @@ function fmtProduction(kw) {
   return { text: fmt(v, 2), unit: "kW" };
 }
 
-// --- Erzeugungs-Diagramm (Verlauf, Canvas) -----------------------------------
+// --- Erzeugungs-Diagramm (Verlauf, Canvas): Erzeugung (Fläche) + Netzbezug
+// (rot) + Einspeisung (grün) als Linien obendrauf, gleiche Y-Skala. -----------
 const PROD_HISTORY_MAX = 60;
-let prodHistory = [];
-const PROD_CHART_COLOR = "#f5b50a"; // == --pv in style.css
+let chartHistory = []; // [{ prod, bezug, einspeisung }]
+const CHART_COLORS = { prod: "#f5b50a", bezug: "#dc2626", einspeisung: "#16a34a" };
+
+function drawSeries(ctx, xFor, yFor, n, h, dpr, vals, color, fill) {
+  if (fill) {
+    ctx.beginPath();
+    ctx.moveTo(xFor(0), h);
+    vals.forEach((v, i) => ctx.lineTo(xFor(i), v == null ? h : yFor(v)));
+    ctx.lineTo(xFor(n - 1), h);
+    ctx.closePath();
+    const grad = ctx.createLinearGradient(0, 0, 0, h);
+    grad.addColorStop(0, color + "50");
+    grad.addColorStop(1, color + "05");
+    ctx.fillStyle = grad;
+    ctx.fill();
+  }
+  ctx.beginPath();
+  let started = false;
+  vals.forEach((v, i) => {
+    if (v === null || v === undefined) return;
+    const px = xFor(i), py = yFor(v);
+    if (!started) { ctx.moveTo(px, py); started = true; } else { ctx.lineTo(px, py); }
+  });
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2 * dpr;
+  ctx.lineJoin = "round";
+  ctx.lineCap = "round";
+  ctx.stroke();
+
+  for (let i = n - 1; i >= 0; i--) {
+    if (vals[i] === null || vals[i] === undefined) continue;
+    ctx.beginPath();
+    ctx.arc(xFor(i), yFor(vals[i]), 2.6 * dpr, 0, Math.PI * 2);
+    ctx.fillStyle = color;
+    ctx.fill();
+    break;
+  }
+}
 
 function drawProdChart(canvas) {
   if (!canvas) return;
@@ -75,50 +115,19 @@ function drawProdChart(canvas) {
   const ctx = canvas.getContext("2d");
   ctx.clearRect(0, 0, w, h);
 
-  const data = prodHistory;
-  if (data.length < 2) return;
-  const known = data.filter((v) => v !== null && v !== undefined);
-  const max = Math.max(0.1, ...(known.length ? known : [0]));
+  const n = chartHistory.length;
+  if (n < 2) return;
+  const allVals = [];
+  chartHistory.forEach((p) => [p.prod, p.bezug, p.einspeisung].forEach((v) => { if (v !== null && v !== undefined) allVals.push(v); }));
+  const max = Math.max(0.1, ...(allVals.length ? allVals : [0]));
   const pad = 3 * dpr;
-  const xStep = (w - pad * 2) / (data.length - 1);
+  const xStep = (w - pad * 2) / (n - 1);
   const xFor = (i) => pad + i * xStep;
   const yFor = (v) => h - pad - (v / max) * (h - pad * 2);
 
-  // Flächenfüllung unter der Linie
-  ctx.beginPath();
-  ctx.moveTo(xFor(0), h);
-  data.forEach((v, i) => ctx.lineTo(xFor(i), v == null ? h : yFor(v)));
-  ctx.lineTo(xFor(data.length - 1), h);
-  ctx.closePath();
-  const grad = ctx.createLinearGradient(0, 0, 0, h);
-  grad.addColorStop(0, PROD_CHART_COLOR + "50");
-  grad.addColorStop(1, PROD_CHART_COLOR + "05");
-  ctx.fillStyle = grad;
-  ctx.fill();
-
-  // Linie
-  ctx.beginPath();
-  let started = false;
-  data.forEach((v, i) => {
-    if (v === null || v === undefined) return;
-    const px = xFor(i), py = yFor(v);
-    if (!started) { ctx.moveTo(px, py); started = true; } else { ctx.lineTo(px, py); }
-  });
-  ctx.strokeStyle = PROD_CHART_COLOR;
-  ctx.lineWidth = 2 * dpr;
-  ctx.lineJoin = "round";
-  ctx.lineCap = "round";
-  ctx.stroke();
-
-  // aktueller Punkt (letzter Wert)
-  for (let i = data.length - 1; i >= 0; i--) {
-    if (data[i] === null || data[i] === undefined) continue;
-    ctx.beginPath();
-    ctx.arc(xFor(i), yFor(data[i]), 3 * dpr, 0, Math.PI * 2);
-    ctx.fillStyle = PROD_CHART_COLOR;
-    ctx.fill();
-    break;
-  }
+  drawSeries(ctx, xFor, yFor, n, h, dpr, chartHistory.map((p) => p.prod), CHART_COLORS.prod, true);
+  drawSeries(ctx, xFor, yFor, n, h, dpr, chartHistory.map((p) => p.bezug), CHART_COLORS.bezug, false);
+  drawSeries(ctx, xFor, yFor, n, h, dpr, chartHistory.map((p) => p.einspeisung), CHART_COLORS.einspeisung, false);
 }
 
 function drawProdCharts() {
@@ -168,9 +177,14 @@ function render(state) {
   el.prodMini.textContent = prodFmt.text;
   el.prodMiniUnit.textContent = prodFmt.unit;
 
-  // Verlaufsdiagramm der Erzeugung
-  prodHistory.push((state.production_kw === null || state.production_kw === undefined) ? null : Math.max(0, state.production_kw));
-  if (prodHistory.length > PROD_HISTORY_MAX) prodHistory.shift();
+  // Verlaufsdiagramm: Erzeugung (Fläche) + Netzbezug (rot) + Einspeisung (grün)
+  const gp = state.power_kw;
+  chartHistory.push({
+    prod: (state.production_kw === null || state.production_kw === undefined) ? null : Math.max(0, state.production_kw),
+    bezug: (gp === null || gp === undefined) ? null : Math.max(0, gp),
+    einspeisung: (gp === null || gp === undefined) ? null : Math.max(0, -gp),
+  });
+  if (chartHistory.length > PROD_HISTORY_MAX) chartHistory.shift();
   drawProdCharts();
 
   // Energie (Tag / Woche / Monat)
@@ -273,6 +287,17 @@ async function loadCosts() {
   } catch (e) { /* ignore, alte Werte bleiben stehen */ }
 }
 
+// --- Lastspitzen-Statistik (Fußleiste) ---------------------------------------
+async function loadPeaks() {
+  try {
+    const r = await fetch("/api/peaks");
+    const p = await r.json();
+    el.peakToday.textContent = fmt(p.today_peak_kw, 1);
+    el.peakAvg.textContent = fmt(p.today_avg_kw, 1);
+    el.peakYear.textContent = fmt(p.year_peak_kw, 1);
+  } catch (e) { /* ignore */ }
+}
+
 // --- Standby-Zeitfenster: dunkelt außerhalb des Fensters komplett ab --------
 async function loadStandbyState() {
   try {
@@ -349,5 +374,7 @@ if (demo) {
   setInterval(loadStandbyState, 20000);
   loadCosts();
   setInterval(loadCosts, 60000);
+  loadPeaks();
+  setInterval(loadPeaks, 30000);
   startStream();
 }

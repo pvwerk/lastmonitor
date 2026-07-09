@@ -295,19 +295,25 @@ def _save_peaks():
 def peak_snapshot():
     """Heutige Spitzenlast, Jahresspitze (jeweils Netzbezug, nicht Einspeisung)
     + durchschnittlicher Verbrauch heute (aus den Kosten-kWh abgeleitet, ohne
-    eigene Integration)."""
+    eigene Integration) + Diagramm-Skalenenden (oben: Erzeugung/Netzbezug,
+    unten: Einspeisung – jeweils heutige Tagesspitze, nicht Rolling-Fenster)."""
     now_dt = datetime.datetime.now()
     midnight = now_dt.replace(hour=0, minute=0, second=0, microsecond=0)
     elapsed_h = max((now_dt - midnight).total_seconds() / 3600.0, 0.01)
     with _costs_lock:
         verbrauch_heute = float(_costs_state["today"].get("verbrauch_kwh") or 0.0)
     with _peaks_lock:
-        today_peak = round(float(_peaks_state["today"].get("peak_kw") or 0.0), 2)
+        t = _peaks_state["today"]
+        today_peak = round(float(t.get("peak_kw") or 0.0), 2)
         year_peak = round(float(_peaks_state["year"].get("peak_kw") or 0.0), 2)
+        chart_top = round(max(float(t.get("peak_kw") or 0.0), float(t.get("peak_prod_kw") or 0.0), 0.1), 2)
+        chart_bottom = round(max(float(t.get("peak_einspeisung_kw") or 0.0), 0.1), 2)
     return {
         "today_peak_kw": today_peak,
         "year_peak_kw": year_peak,
         "today_avg_kw": round(verbrauch_heute / elapsed_h, 2),
+        "chart_top_kw": chart_top,
+        "chart_bottom_kw": chart_bottom,
     }
 
 
@@ -329,7 +335,7 @@ def cost_loop():
                     _costs_last_tick = now  # kein Integrations-Sprung über den Tageswechsel hinweg
             with _peaks_lock:
                 if _peaks_state["today"].get("date") != today_key:
-                    _peaks_state["today"] = {"date": today_key, "peak_kw": 0.0}
+                    _peaks_state["today"] = {"date": today_key, "peak_kw": 0.0, "peak_prod_kw": 0.0, "peak_einspeisung_kw": 0.0}
                 if _peaks_state["year"].get("year") != year_key:
                     _peaks_state["year"] = {"year": year_key, "peak_kw": 0.0}
             snap = reading.snapshot()
@@ -346,12 +352,19 @@ def cost_loop():
                     _costs_state["today"]["eigenverbrauch_kwh"] = float(_costs_state["today"].get("eigenverbrauch_kwh") or 0.0) + eigen_kw * dt_h
             _costs_last_tick = now
             if grid is not None:
-                load_kw = max(0.0, grid)  # nur Netzbezug zählt als "Last", nicht Einspeisung
+                load_kw = max(0.0, grid)          # Netzbezug = "Last"
+                einspeisung_kw = max(0.0, -grid)  # Einspeisung als positiver Betrag getrackt
                 with _peaks_lock:
                     if load_kw > float(_peaks_state["today"].get("peak_kw") or 0.0):
                         _peaks_state["today"]["peak_kw"] = load_kw
                     if load_kw > float(_peaks_state["year"].get("peak_kw") or 0.0):
                         _peaks_state["year"]["peak_kw"] = load_kw
+                    if einspeisung_kw > float(_peaks_state["today"].get("peak_einspeisung_kw") or 0.0):
+                        _peaks_state["today"]["peak_einspeisung_kw"] = einspeisung_kw
+            if prod is not None:
+                with _peaks_lock:
+                    if prod > float(_peaks_state["today"].get("peak_prod_kw") or 0.0):
+                        _peaks_state["today"]["peak_prod_kw"] = prod
             if now - _costs_last_save > 60:
                 _save_costs()
                 _save_peaks()

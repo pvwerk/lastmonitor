@@ -51,9 +51,10 @@ body.crit .ring { animation: ringpulse 1s infinite; }
   grid-column: 1; grid-row: 1 / span 2;
   display: flex; flex-direction: column;
   align-items: center; justify-content: center;
-  gap: 1vh; text-align: center;
+  gap: 1.4vw; text-align: center; /* = derselbe Abstand wie zwischen Erzeugung/Energie rechts (.layout gap) */
   border-right: 1px solid #1a2436;
 }
+.layout.costs-on .netz { gap: 1vh; } /* .netz nur 2/3 hoch -> wieder kompakter */
 .erzeugung { grid-column: 2; grid-row: 1; }
 .energy    { grid-column: 2; grid-row: 2; }
 
@@ -84,8 +85,10 @@ body.crit .ring { animation: ringpulse 1s infinite; }
    Hälften, darunter Zahl links / Diagramm rechts – vertikal geteilt. */
 .mini-title-centered { text-align: center; }
 .mini-body { flex: 1; display: flex; flex-direction: row; align-items: center; gap: 1.4vw; min-height: 0; }
-.mini-metric { flex: 0 0 auto; display: flex; align-items: baseline; gap: .6vw; }
-.mini-val { font-size: 5.4vh; font-weight: 800; line-height: 1; color: var(--pv); }
+/* min-width reserviert Platz für die größtmögliche Zahl (z. B. "999,99") –
+   sonst würde eine große Zahl das Diagramm daneben schmaler drücken. */
+.mini-metric { flex: 0 0 auto; min-width: 23vh; display: flex; align-items: baseline; gap: .6vw; }
+.mini-val { font-size: 5.4vh; font-weight: 800; line-height: 1; color: var(--pv); font-variant-numeric: tabular-nums; }
 .mini-unit { font-size: 2.2vh; color: var(--muted); }
 .prod-chart-mini { flex: 1; height: 100%; min-width: 0; display: block; }
 
@@ -110,8 +113,11 @@ body.crit .ring { animation: ringpulse 1s infinite; }
   letter-spacing: .02em; margin-bottom: 1vh;
 }
 
-/* ---- Tacho (Netzbezug) ---- */
-.gauge-wrap { position: relative; width: min(40vw, 56vh); }
+/* ---- Tacho (Netzbezug) ----
+   Standard-Ansicht: .netz hat volle Höhe -> Tacho + Schrift größer, nutzt
+   den bisher ungenutzten Leerraum oben/unten. Kosten-Ansicht (.netz nur
+   2/3 hoch) bekommt die bisherige, kompaktere Größe per Override zurück. */
+.gauge-wrap { position: relative; width: min(44vw, 64vh); }
 .gauge { width: 100%; display: block; }
 .gauge-bg { fill: none; stroke: #1e293b; stroke-width: 16; stroke-linecap: round; }
 .gauge-fill {
@@ -130,12 +136,18 @@ body.crit .ring { animation: ringpulse 1s infinite; }
   display: flex; flex-direction: row; align-items: baseline;
   justify-content: center; gap: 1vw;
 }
-.power { font-size: 9vh; font-weight: 800; line-height: 1; color: var(--state); transition: color .4s ease; }
-.power-unit { font-size: 3vh; color: var(--muted); }
+.power { font-size: 10.5vh; font-weight: 800; line-height: 1; color: var(--state); transition: color .4s ease; }
+.power-unit { font-size: 3.4vh; color: var(--muted); }
 
 .pct-row { display: flex; align-items: baseline; gap: .8vw; flex-wrap: wrap; justify-content: center; }
-.pct { font-size: 3.6vh; font-weight: 700; color: var(--state); }
-.pct-label { font-size: 1.9vh; color: var(--muted); }
+.pct { font-size: 4.2vh; font-weight: 700; color: var(--state); }
+.pct-label { font-size: 2.2vh; color: var(--muted); }
+
+.layout.costs-on .gauge-wrap { width: min(40vw, 56vh); }
+.layout.costs-on .power { font-size: 9vh; }
+.layout.costs-on .power-unit { font-size: 3vh; }
+.layout.costs-on .pct { font-size: 3.6vh; }
+.layout.costs-on .pct-label { font-size: 1.9vh; }
 
 /* ---- Gesamtverbrauch + Richtung ----
    Standard-Ansicht (ohne Kosten-Anzeige) hat volle netz-Höhe zur Verfügung –
@@ -143,7 +155,7 @@ body.crit .ring { animation: ringpulse 1s infinite; }
    aktivierter Kosten-Anzeige ist .netz nur 2/3 hoch, dort per Override
    wieder kompakter (siehe unten). */
 .totalbox {
-  margin-top: .6vh; width: min(42vw, 58vh);
+  margin-top: .6vh; width: min(46vw, 66vh);
   background: #0e1729; border: 1px solid #1a2436; border-radius: 16px;
   padding: 2vh 2.2vw;
 }
@@ -161,13 +173,14 @@ body.crit .ring { animation: ringpulse 1s infinite; }
 .layout.costs-on .dir { font-size: 2.2vh; margin-top: .6vh; gap: .6vw; }
 .layout.costs-on .dir .dot { width: 1.6vh; height: 1.6vh; }
 
-.status { font-size: 2vh; color: var(--muted); min-height: 2.4vh; }
+.status { font-size: 2.3vh; color: var(--muted); min-height: 2.6vh; }
 .status.err { color: var(--critical); font-weight: 700; }
+.layout.costs-on .status { font-size: 2vh; min-height: 2.4vh; }
 
 /* ---- Erzeugung (großes Feld) – Zahl behält ihre Größe, Diagramm (.prod-chart)
    nimmt darunter den übrigen Platz ein statt die Zahl mittig zu strecken. ---- */
 .big-metric { flex: 0 0 auto; display: flex; align-items: center; justify-content: center; gap: 1vw; padding-top: 1vh; }
-.big-val { font-size: 12vh; font-weight: 800; line-height: 1; color: var(--pv); }
+.big-val { font-size: 12vh; font-weight: 800; line-height: 1; color: var(--pv); font-variant-numeric: tabular-nums; }
 .big-unit { font-size: 4vh; color: var(--muted); }
 
 /* ---- Energie (Tag groß, Woche/Monat klein) ---- */
@@ -229,9 +242,9 @@ body.crit .ring { animation: ringpulse 1s infinite; }
 .brand.sampl img { height: 6.5vh; }
 
 .peak-stats {
-  display: flex; align-items: center; justify-content: center;
-  gap: 2.6vw; flex-wrap: wrap; text-align: center;
-  font-size: 1.7vh; color: var(--muted);
+  flex: 1; display: flex; align-items: center; justify-content: space-evenly;
+  gap: 1vw; text-align: center;
+  font-size: 7vh; line-height: 1; color: var(--muted);
 }
 .peak-stats b { color: var(--fg); font-weight: 700; }
 .peak-stats .peak-avg { font-weight: 700; color: var(--fg); }

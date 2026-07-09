@@ -62,18 +62,22 @@ function fmtProduction(kw) {
   return { text: fmt(v, 2), unit: "kW" };
 }
 
-// --- Erzeugungs-Diagramm (Verlauf, Canvas): Erzeugung (Fläche) + Netzbezug
-// (rot) + Einspeisung (grün) als Linien obendrauf, gleiche Y-Skala. -----------
+// --- Erzeugungs-Diagramm (Verlauf, Canvas): Erzeugung (Fläche, oben) +
+// Netzbezug (rot, oben) + Einspeisung (grün, unten/negativ) auf gemeinsamer
+// Nulllinie. Skala fest auf die heutige Tagesspitze (nicht Rolling-Fenster,
+// siehe /api/peaks: chart_top_kw / chart_bottom_kw). ------------------------
 const PROD_HISTORY_MAX = 60;
-let chartHistory = []; // [{ prod, bezug, einspeisung }]
+let chartHistory = []; // [{ prod, bezug, einspeisung }] – einspeisung als positiver Betrag gespeichert, beim Zeichnen negiert
+let chartTopKw = null;    // heutige Spitze Erzeugung/Netzbezug (oberes Skalenende)
+let chartBottomKw = null; // heutige Spitze Einspeisung (unteres Skalenende, als positiver Betrag)
 const CHART_COLORS = { prod: "#f5b50a", bezug: "#dc2626", einspeisung: "#16a34a" };
 
-function drawSeries(ctx, xFor, yFor, n, h, dpr, vals, color, fill) {
+function drawSeries(ctx, xFor, yFor, n, h, dpr, vals, color, fill, zeroY) {
   if (fill) {
     ctx.beginPath();
-    ctx.moveTo(xFor(0), h);
-    vals.forEach((v, i) => ctx.lineTo(xFor(i), v == null ? h : yFor(v)));
-    ctx.lineTo(xFor(n - 1), h);
+    ctx.moveTo(xFor(0), zeroY);
+    vals.forEach((v, i) => ctx.lineTo(xFor(i), v == null ? zeroY : yFor(v)));
+    ctx.lineTo(xFor(n - 1), zeroY);
     ctx.closePath();
     const grad = ctx.createLinearGradient(0, 0, 0, h);
     grad.addColorStop(0, color + "50");
@@ -117,17 +121,34 @@ function drawProdChart(canvas) {
 
   const n = chartHistory.length;
   if (n < 2) return;
-  const allVals = [];
-  chartHistory.forEach((p) => [p.prod, p.bezug, p.einspeisung].forEach((v) => { if (v !== null && v !== undefined) allVals.push(v); }));
-  const max = Math.max(0.1, ...(allVals.length ? allVals : [0]));
+
+  // Fallback (noch keine /api/peaks-Antwort da): Rolling-Fenster-Max, damit
+  // beim ersten Laden nicht auf eine leere Skala gewartet werden muss.
+  let top = chartTopKw, bottom = chartBottomKw;
+  if (top === null || bottom === null) {
+    const allVals = [];
+    chartHistory.forEach((p) => [p.prod, p.bezug, p.einspeisung].forEach((v) => { if (v !== null && v !== undefined) allVals.push(v); }));
+    top = Math.max(0.1, ...(allVals.length ? allVals : [0]));
+    bottom = 0.1;
+  }
   const pad = 3 * dpr;
   const xStep = (w - pad * 2) / (n - 1);
   const xFor = (i) => pad + i * xStep;
-  const yFor = (v) => h - pad - (v / max) * (h - pad * 2);
+  const range = top + bottom;
+  const yFor = (v) => pad + ((top - v) / range) * (h - pad * 2);
+  const zeroY = yFor(0);
 
-  drawSeries(ctx, xFor, yFor, n, h, dpr, chartHistory.map((p) => p.prod), CHART_COLORS.prod, true);
-  drawSeries(ctx, xFor, yFor, n, h, dpr, chartHistory.map((p) => p.bezug), CHART_COLORS.bezug, false);
-  drawSeries(ctx, xFor, yFor, n, h, dpr, chartHistory.map((p) => p.einspeisung), CHART_COLORS.einspeisung, false);
+  drawSeries(ctx, xFor, yFor, n, h, dpr, chartHistory.map((p) => p.prod), CHART_COLORS.prod, true, zeroY);
+  drawSeries(ctx, xFor, yFor, n, h, dpr, chartHistory.map((p) => p.bezug), CHART_COLORS.bezug, false, zeroY);
+  drawSeries(ctx, xFor, yFor, n, h, dpr, chartHistory.map((p) => (p.einspeisung == null ? null : -p.einspeisung)), CHART_COLORS.einspeisung, false, zeroY);
+
+  // Nulllinie, dezent
+  ctx.beginPath();
+  ctx.moveTo(pad, zeroY);
+  ctx.lineTo(w - pad, zeroY);
+  ctx.strokeStyle = "#ffffff20";
+  ctx.lineWidth = 1 * dpr;
+  ctx.stroke();
 }
 
 function drawProdCharts() {
@@ -164,7 +185,7 @@ function render(state) {
     el.dirText.textContent = "Einspeisung " + fmt(Math.abs(power), 1) + " kW";
   } else if (state.direction === "bezug") {
     el.dir.className = "dir bezug";
-    el.dirText.textContent = "Netzbezug " + fmt(Math.abs(power), 1) + " kW";
+    el.dirText.textContent = "Bezug " + fmt(Math.abs(power), 1) + " kW"; // "Netzbezug" steht schon als Titel oben, nicht doppeln
   } else {
     el.dir.className = "dir";
     el.dirText.textContent = "–";
@@ -295,6 +316,9 @@ async function loadPeaks() {
     el.peakToday.textContent = fmt(p.today_peak_kw, 1);
     el.peakAvg.textContent = fmt(p.today_avg_kw, 1);
     el.peakYear.textContent = fmt(p.year_peak_kw, 1);
+    if (p.chart_top_kw !== undefined) chartTopKw = p.chart_top_kw;
+    if (p.chart_bottom_kw !== undefined) chartBottomKw = p.chart_bottom_kw;
+    drawProdCharts();
   } catch (e) { /* ignore */ }
 }
 

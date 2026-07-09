@@ -161,19 +161,13 @@ body.crit .ring { animation: ringpulse 1s infinite; }
   background: #0e1729; border: 1px solid #1a2436; border-radius: 16px;
   padding: 2vh 2.2vw;
 }
-.total-line { display: flex; justify-content: space-between; align-items: baseline; }
+.total-line { display: flex; justify-content: center; align-items: baseline; gap: 1vw; }
 .total-label { font-size: 2.8vh; color: var(--muted); }
 .total-val { font-size: 5.4vh; font-weight: 800; }
-.dir { display: flex; align-items: center; gap: .7vw; margin-top: 1vh; font-size: 2.8vh; font-weight: 700; }
-.dir .dot { width: 2.1vh; height: 2.1vh; border-radius: 50%; background: var(--muted); }
-.dir.bezug      .dot { background: var(--state); }   .dir.bezug      { color: var(--fg); }
-.dir.einspeisung .dot { background: var(--feed); }   .dir.einspeisung { color: var(--feed); }
 
 .layout.costs-on .totalbox { margin-top: 1vh; width: min(40vw, 56vh); padding: 1.4vh 1.6vw; border-radius: 14px; }
 .layout.costs-on .total-label { font-size: 2.2vh; }
 .layout.costs-on .total-val { font-size: 3.4vh; }
-.layout.costs-on .dir { font-size: 2.2vh; margin-top: .6vh; gap: .6vw; }
-.layout.costs-on .dir .dot { width: 1.6vh; height: 1.6vh; }
 
 .status { font-size: 2.3vh; color: var(--muted); min-height: 2.6vh; }
 .status.err { color: var(--critical); font-weight: 700; }

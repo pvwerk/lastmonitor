@@ -242,9 +242,13 @@ body.crit .ring { animation: ringpulse 1s infinite; }
 .brand.sampl img { height: 6.5vh; }
 
 .peak-stats {
+  /* 70% Fußzeilenhöhe (7vh) passt mit den vollen Labeltexten nicht einzeilig
+     rein -> Labels gekürzt (Spitze heute / Ø Verbrauch / Spitze Jahr) und
+     Schrift auf die größte noch einzeilig passende Größe gesetzt. */
   flex: 1; display: flex; align-items: center; justify-content: space-evenly;
-  gap: 1vw; text-align: center;
-  font-size: 7vh; line-height: 1; color: var(--muted);
+  gap: 1vw; text-align: center; white-space: nowrap;
+  font-size: 3.8vh; line-height: 1; color: var(--muted);
+  font-variant-numeric: tabular-nums;
 }
 .peak-stats b { color: var(--fg); font-weight: 700; }
 .peak-stats .peak-avg { font-weight: 700; color: var(--fg); }

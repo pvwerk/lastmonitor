@@ -768,6 +768,11 @@ def settings_page():
     return FileResponse(os.path.join(STATIC_DIR, "settings.html"))
 
 
+@app.get("/office")
+def office_page():
+    return FileResponse(os.path.join(STATIC_DIR, "office.html"))
+
+
 @app.get("/api/state")
 def api_state():
     return JSONResponse(compute_status(reading.snapshot(), get_config()))

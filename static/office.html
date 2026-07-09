@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Büro-Übersicht – Küchen-Lastmonitor</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <link rel="stylesheet" href="/static/office.css" />
+</head>
+<body class="office-body">
+  <header class="office-header">
+    <h1 id="officeTitle">Büro-Übersicht</h1>
+    <div class="office-status" id="officeStatus">Verbinde …</div>
+    <nav class="office-nav">
+      <a href="/">Küchen-Anzeige</a>
+      <a href="/settings">Einstellungen</a>
+    </nav>
+  </header>
+
+  <main class="office-grid">
+
+    <section class="ocard ocard-live">
+      <h2>Aktuell</h2>
+      <div class="olive-row">
+        <div class="olive"><span class="olabel">Netzbezug</span><span class="oval" id="oPower">– kW</span></div>
+        <div class="olive"><span class="olabel">Erzeugung</span><span class="oval pv" id="oProd">– kW</span></div>
+        <div class="olive"><span class="olabel">Gesamtverbrauch</span><span class="oval" id="oCons">– kW</span></div>
+        <div class="olive"><span class="olabel">Auslastung</span><span class="oval" id="oPct">– %</span></div>
+      </div>
+      <div class="odir" id="oDir">–</div>
+    </section>
+
+    <section class="ocard">
+      <h2>Lastspitzen</h2>
+      <div class="olive-row">
+        <div class="olive"><span class="olabel">Spitze heute</span><span class="oval" id="oPeakToday">– kW</span></div>
+        <div class="olive"><span class="olabel">Ø Verbrauch heute</span><span class="oval" id="oPeakAvg">– kW</span></div>
+        <div class="olive"><span class="olabel">Jahresspitze</span><span class="oval" id="oPeakYear">– kW</span></div>
+      </div>
+    </section>
+
+    <section class="ocard">
+      <h2>Energie</h2>
+      <table class="otable">
+        <thead><tr><th></th><th>Ertrag</th><th>Verbrauch</th></tr></thead>
+        <tbody>
+          <tr><td>Heute</td><td id="oDayE">–</td><td id="oDayV">–</td></tr>
+          <tr><td>Woche</td><td id="oWeekE">–</td><td id="oWeekV">–</td></tr>
+          <tr><td>Monat</td><td id="oMonthE">–</td><td id="oMonthV">–</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="ocard">
+      <h2>Kosten</h2>
+      <table class="otable">
+        <thead><tr><th></th><th>Verbrauch</th><th>Eigenverbr.</th><th>Kosten</th></tr></thead>
+        <tbody>
+          <tr><td>Heute</td><td id="oCostTodayV">–</td><td id="oCostTodayE">–</td><td id="oCostTodayK">–</td></tr>
+          <tr><td>Vortag</td><td id="oCostPrevV">–</td><td id="oCostPrevE">–</td><td id="oCostPrevK">–</td></tr>
+        </tbody>
+      </table>
+      <p class="ohint" id="oCostHint"></p>
+    </section>
+
+    <section class="ocard ocard-wide">
+      <h2>Zähler</h2>
+      <div class="ometers" id="oMeters"><p class="ohint">Keine Zähler konfiguriert (Einstellungen → Zähler).</p></div>
+    </section>
+
+  </main>
+
+  <script src="/static/office.js"></script>
+</body>
+</html>

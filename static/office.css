@@ -1,0 +1,68 @@
+/* Büro-Übersicht: dichtes Dashboard, kein Vollbild-Zwang wie die
+   Küchen-Anzeige – normales Scrollen erlaubt, für Browser-Fenster/-Tab. */
+.office-body {
+  height: auto; min-height: 100vh; overflow: auto;
+  padding: 24px 32px 48px;
+  font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+.office-header {
+  display: flex; align-items: baseline; gap: 20px; flex-wrap: wrap;
+  padding-bottom: 16px; margin-bottom: 20px; border-bottom: 1px solid #1a2436;
+}
+.office-header h1 { font-size: 22px; font-weight: 800; }
+.office-status { font-size: 14px; color: var(--muted); }
+.office-status.err { color: var(--critical); font-weight: 700; }
+.office-nav { margin-left: auto; display: flex; gap: 14px; }
+.office-nav a { color: #60a5fa; text-decoration: none; font-size: 14px; }
+.office-nav a:hover { text-decoration: underline; }
+
+.office-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 18px;
+}
+
+.ocard {
+  background: #0e1729; border: 1px solid #1a2436; border-radius: 14px;
+  padding: 18px 20px;
+}
+.ocard h2 {
+  font-size: 15px; font-weight: 700; color: var(--muted);
+  letter-spacing: .02em; margin-bottom: 14px;
+}
+.ocard-live { grid-column: 1 / -1; }
+.ocard-wide { grid-column: 1 / -1; }
+
+.olive-row {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 14px;
+}
+.olive {
+  display: flex; flex-direction: column; gap: 4px;
+  background: #111a2e; border: 1px solid #1e293b; border-radius: 10px;
+  padding: 12px 14px;
+}
+.olabel { font-size: 12px; color: var(--muted); }
+.oval { font-size: 26px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.oval.pv { color: var(--pv); }
+.odir { margin-top: 12px; font-size: 14px; font-weight: 700; color: var(--muted); }
+.odir.bezug { color: var(--fg); }
+.odir.einspeisung { color: var(--feed); }
+
+.otable { width: 100%; border-collapse: collapse; font-size: 14px; }
+.otable th { text-align: right; color: var(--muted); font-weight: 600; padding: 4px 0 8px; font-size: 12px; }
+.otable th:first-child, .otable td:first-child { text-align: left; color: var(--muted); }
+.otable td { text-align: right; padding: 6px 0; font-weight: 700; font-variant-numeric: tabular-nums; border-top: 1px solid #1a2436; }
+
+.ohint { font-size: 12px; color: var(--muted); margin-top: 10px; }
+
+.ometers { display: flex; flex-wrap: wrap; gap: 12px; }
+.ometer {
+  background: #111a2e; border: 1px solid #1e293b; border-radius: 10px;
+  padding: 12px 16px; min-width: 160px; display: flex; flex-direction: column; gap: 4px;
+}
+.ometer .om-name { font-size: 13px; color: var(--muted); }
+.ometer .om-val { font-size: 22px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.ometer.err .om-val { color: var(--critical); font-size: 14px; font-weight: 600; }
+.ometer .om-tag { font-size: 11px; color: #7e8db0; text-transform: uppercase; letter-spacing: .04em; }

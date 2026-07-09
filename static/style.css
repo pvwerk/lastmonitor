@@ -45,7 +45,9 @@ body.crit .ring { animation: ringpulse 1s infinite; }
   grid-template-columns: 1fr 1fr;
   grid-template-rows: 1fr 1fr;
   gap: 1.4vw;
-  padding: 3vh 3vw 12vh;     /* unten Platz für die Logo-Fußleiste */
+  padding: 3vh 3vw 12.5vh;   /* unten Platz für die Logo-Fußleiste (10vh) + Lücke
+                                  = genau der gleiche Abstand wie zwischen
+                                  Erzeugung/Energie (row-gap 1.4vw) */
 }
 .netz {
   grid-column: 1; grid-row: 1 / span 2;

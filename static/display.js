@@ -10,6 +10,8 @@ const el = {
   pct: document.getElementById("pct"),
   maxkw: document.getElementById("maxkw"),
   total: document.getElementById("total"),
+  dir: document.getElementById("dir"),
+  dirText: document.getElementById("dirText"),
   prod: document.getElementById("prod"),
   dayErtrag: document.getElementById("dayErtrag"),
   dayVerbrauch: document.getElementById("dayVerbrauch"),
@@ -176,6 +178,18 @@ function render(state) {
   // Gesamtverbrauch (kann negativ sein)
   el.total.textContent = (state.consumption_kw === null || state.consumption_kw === undefined)
     ? "– kW" : fmt(state.consumption_kw, 1) + " kW";
+
+  // Richtung: Netzbezug / Einspeisung
+  if (state.direction === "einspeisung") {
+    el.dir.className = "dir einspeisung";
+    el.dirText.textContent = "Einspeisung " + fmt(Math.abs(power), 1) + " kW";
+  } else if (state.direction === "bezug") {
+    el.dir.className = "dir bezug";
+    el.dirText.textContent = "Bezug " + fmt(Math.abs(power), 1) + " kW"; // "Netzbezug" steht schon als Titel oben, nicht doppeln
+  } else {
+    el.dir.className = "dir";
+    el.dirText.textContent = "–";
+  }
 
   // Erzeugung (großes Feld + ggf. kleines Feld bei aktivierter Kosten-Anzeige)
   const prodFmt = fmtProduction(state.production_kw);

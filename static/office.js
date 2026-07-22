@@ -92,6 +92,30 @@ async function loadPeaks() {
   } catch (e) { /* ignore */ }
 }
 
+async function loadProvisioning() {
+  try {
+    const r = await fetch("/api/provisioning");
+    const p = await r.json();
+    $("oProvCurrent").textContent = euro(p.current_cost_eur);
+    $("oProvYear").textContent = euro(p.cost_per_year_eur);
+    $("oProvHint").textContent = p.rate_eur_kw_jahr > 0
+      ? `Preis ${fmt(p.rate_eur_kw_jahr, 2)} €/kW/Jahr · heutige Spitze ${kw(p.today_peak_kw, 1)} · Jahresspitze ${kw(p.year_peak_kw, 1)}`
+      : "Kein Bereitstellungspreis hinterlegt (Einstellungen → Bereitstellungskosten).";
+    const tbody = $("oProvRows");
+    const table = $("oProvTable");
+    if (!p.rows || !p.rows.length) {
+      table.style.display = "none";
+    } else {
+      table.style.display = "";
+      tbody.innerHTML = p.rows.map(row => `<tr>
+        <td>${fmt(row.cap_kw, 0)} kW</td>
+        <td>${euro(row.savings_month_eur)}</td>
+        <td>${euro(row.savings_year_eur)}</td>
+      </tr>`).join("");
+    }
+  } catch (e) { /* ignore */ }
+}
+
 async function loadDisplayConfig() {
   try {
     const r = await fetch("/api/config");
@@ -126,4 +150,6 @@ loadCosts();
 setInterval(loadCosts, 30000);
 loadPeaks();
 setInterval(loadPeaks, 30000);
+loadProvisioning();
+setInterval(loadProvisioning, 30000);
 startStream();

@@ -132,6 +132,7 @@ function collect() {
       show_on_display: $("costs_show_on_display").checked,
       bezug_eur_kwh: numOrNull($("costs_bezug").value) ?? 0.35,
       pv_eur_kwh: numOrNull($("costs_pv").value) ?? 0.10,
+      bereitstellung_eur_kw_jahr: numOrNull($("costs_bereitstellung").value) ?? 0,
     },
     sms: {
       enabled: $("sms_enabled").checked,
@@ -181,6 +182,7 @@ function apply(cfg) {
   $("costs_show_on_display").checked = !!co.show_on_display;
   $("costs_bezug").value = co.bezug_eur_kwh ?? 0.35;
   $("costs_pv").value = co.pv_eur_kwh ?? 0.10;
+  $("costs_bereitstellung").value = co.bereitstellung_eur_kw_jahr ?? 0;
   $("sms_enabled").checked = !!s.enabled;
   $("sms_api_key").value = s.api_key || "";
   $("sms_sender").value = s.sender || "Lastmonitor";

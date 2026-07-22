@@ -190,6 +190,18 @@
       <div id="costsStatus" class="hint" style="margin-top:8px"></div>
     </div>
 
+    <div class="card">
+      <h2>Bereitstellungskosten (Leistungspreis)</h2>
+      <p class="hint" style="margin-bottom:12px">Jährlicher Preis pro kW Anschluss-/Bereitstellungsleistung,
+        berechnet aus der höchsten gemessenen Lastspitze. In der Büro-Übersicht erscheint daraus eine
+        Tabelle mit möglicher Ersparnis, wenn die Spitze durch Lastmanagement gekappt würde. Die
+        Ausgangs-Spitze wird automatisch aktualisiert, sobald ein neuer Rekord gemessen wird.</p>
+      <div class="row">
+        <div class="field"><label>Bereitstellungspreis (€/kW/Jahr)</label><input id="costs_bereitstellung" type="number" step="0.01" min="0" value="0" /></div>
+      </div>
+      <div id="provisioningStatus" class="hint" style="margin-top:8px"></div>
+    </div>
+
     <div class="btns">
       <button class="btn-primary" id="btnSave">Speichern und neuladen</button>
       <a href="/" class="btn-ghost" style="text-decoration:none;display:inline-block">Zur Anzeige</a>

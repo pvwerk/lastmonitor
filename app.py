@@ -20,6 +20,7 @@ im PVWERK-CRM, damit der Pi nach der Inbetriebnahme auch an einem anderen
 Standort (anderes Netzwerk) aus der Ferne diagnostizierbar bleibt.
 """
 import json
+import math
 import os
 import re
 import sys
@@ -314,6 +315,45 @@ def peak_snapshot():
         "today_avg_kw": round(verbrauch_heute / elapsed_h, 2),
         "chart_top_kw": chart_top,
         "chart_bottom_kw": chart_bottom,
+    }
+
+
+def provisioning_snapshot():
+    """Bereitstellungskosten (Leistungspreis, €/kW/Jahr) aus der höchsten
+    gemessenen Lastspitze + Tabelle möglicher Ersparnis beim Kappen der
+    Spitze in 5-kW-Schritten bis minimal 60 kW. Die Ausgangs-Spitze
+    (Jahresspitze) wird von peak_snapshot() bereits live nachgeführt, sobald
+    ein neuer Rekord gemessen wird -- hier nur gelesen, nie eigenständig
+    zwischengespeichert, damit ein neuer Rekord sofort in Tabelle/Kosten
+    einfließt (Jans Vorgabe: "wenn es eine neue Spitze gibt, muss das auch
+    wieder angepasst werden in der Ausgangszahl")."""
+    cfg = get_config()
+    rate = float((cfg.get("costs") or {}).get("bereitstellung_eur_kw_jahr", 0) or 0)
+    peaks = peak_snapshot()
+    today_peak = peaks["today_peak_kw"]
+    year_peak = peaks["year_peak_kw"]
+
+    rows = []
+    if year_peak > 60:
+        cap = math.floor(year_peak / 5.0) * 5
+        if cap >= year_peak:
+            cap -= 5  # "abgerundet" -- bei glatten 5ern eine Stufe echt kappen, sonst keine Wirkung
+        while cap >= 60:
+            savings_year = round((year_peak - cap) * rate, 2)
+            rows.append({
+                "cap_kw": cap,
+                "savings_year_eur": savings_year,
+                "savings_month_eur": round(savings_year / 12.0, 2),
+            })
+            cap -= 5
+
+    return {
+        "rate_eur_kw_jahr": rate,
+        "today_peak_kw": today_peak,
+        "year_peak_kw": year_peak,
+        "current_cost_eur": round(today_peak * rate, 2),
+        "cost_per_year_eur": round(year_peak * rate, 2),
+        "rows": rows,
     }
 
 
@@ -800,6 +840,11 @@ def api_costs():
 @app.get("/api/peaks")
 def api_peaks():
     return JSONResponse(peak_snapshot())
+
+
+@app.get("/api/provisioning")
+def api_provisioning():
+    return JSONResponse(provisioning_snapshot())
 
 
 # --- Auto-Reload der Kiosk-Anzeige nach Einstellungs-Änderungen --------------

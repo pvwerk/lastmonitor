@@ -139,6 +139,7 @@ body.crit .ring { animation: ringpulse 1s infinite; }
   justify-content: center; gap: 1vw;
 }
 .power { font-size: 10.5vh; font-weight: 800; line-height: 1; color: var(--state); transition: color .4s ease; }
+.power.feed { color: var(--ok); }
 .power-unit { font-size: 3.4vh; color: var(--muted); }
 
 .pct-row { display: flex; align-items: baseline; gap: .8vw; flex-wrap: wrap; justify-content: center; }

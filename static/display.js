@@ -163,9 +163,13 @@ function render(state) {
   el.main.className = "layout level-" + level + (costsEnabled ? " costs-on" : "");
   document.body.classList.toggle("crit", level === "critical");
 
-  // Netzbezug (Betrag im Tacho)
+  // Netzbezug (Betrag im Tacho) -- bei Einspeisung grün mit Minus-Vorzeichen,
+  // damit die Zahl nicht wie ein (falscher) Netzbezug aussieht.
   const power = state.power_kw;
-  el.power.textContent = (power === null || power === undefined) ? "–" : fmt(Math.abs(power), 1);
+  const isFeed = state.direction === "einspeisung";
+  el.power.textContent = (power === null || power === undefined)
+    ? "–" : (isFeed ? "-" : "") + fmt(Math.abs(power), 1);
+  el.power.classList.toggle("feed", isFeed);
   el.maxkw.textContent = fmt(state.max_power_kw, 0);
 
   // Auslastung + Tacho (nur Bezug)

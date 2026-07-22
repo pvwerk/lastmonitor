@@ -68,7 +68,14 @@
   "costs": {
     "show_on_display": false,
     "bezug_eur_kwh": 0.35,
-    "pv_eur_kwh": 0.10
+    "pv_eur_kwh": 0.10,
+    "bereitstellung_eur_kw_jahr": 0
+  },
+  "siren": {
+    "enabled": false,
+    "threshold_percent": 90,
+    "gpio_pin": 17,
+    "active_low": true
   },
   "remote_report": {
     "enabled": false,

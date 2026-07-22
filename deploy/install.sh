@@ -24,6 +24,9 @@ python3 -m venv "$APP_DIR/venv"
 "$APP_DIR/venv/bin/pip" install --upgrade pip
 "$APP_DIR/venv/bin/pip" install -r "$APP_DIR/requirements.txt"
 
+echo "==> GPIO-Zugriff (Sirene bei Überlast) …"
+sudo usermod -aG gpio "$RUN_USER" || true
+
 echo "==> Konfiguration …"
 if [ ! -f "$APP_DIR/config.json" ]; then
   cp "$APP_DIR/config.example.json" "$APP_DIR/config.json"
@@ -40,6 +43,7 @@ Wants=network-online.target
 [Service]
 Type=simple
 User=$RUN_USER
+SupplementaryGroups=gpio
 WorkingDirectory=$APP_DIR
 ExecStart=$APP_DIR/venv/bin/uvicorn app:app --host 0.0.0.0 --port 8000
 Restart=always

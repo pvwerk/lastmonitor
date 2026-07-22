@@ -405,6 +405,10 @@ def cost_loop():
                 with _peaks_lock:
                     if prod > float(_peaks_state["today"].get("peak_prod_kw") or 0.0):
                         _peaks_state["today"]["peak_prod_kw"] = prod
+            # Sirene hier statt in sms_monitor_loop (dort nur alle 15s) --
+            # bei einer akustischen Überlast-Warnung zählt schnelle Reaktion.
+            siren_cfg_snapshot = get_config()
+            siren_check(compute_status(snap, siren_cfg_snapshot), siren_cfg_snapshot)
             if now - _costs_last_save > 60:
                 _save_costs()
                 _save_peaks()
@@ -648,6 +652,120 @@ def sms_check_connection(state, cfg):
                 _sms_send_and_record(sms_cfg, f"{title}: Verbindung zum Messgerät wieder da.")
             _sms_state["conn_phase"] = "ok"
             _sms_state["offline_since"] = None
+
+
+# --- Sirene (GPIO-Signal bei Überlast) ---------------------------------------
+# Physischer Signalgeber (Sirene/Blitzleuchte), angesteuert über ein 5V-
+# Relaismodul am GPIO-Header -- bewusst NICHT über WLAN/Netzwerk (Jans
+# Vorgabe: LAN und WLAN sind beim Bruder getrennte Netze, keine stabile
+# Verbindung). Fehler beim GPIO-Zugriff (kein echter Pi, fehlende
+# Berechtigung, falscher Pin) dürfen den Dienst NIE zum Absturz bringen --
+# die Sirene ist ein Zusatzfeature, alles hier ist entsprechend defensiv
+# mit try/except abgesichert; Fehler landen nur in _siren_state["error"]
+# und werden in /settings sichtbar gemacht.
+try:
+    from gpiozero import OutputDevice as _GpioOutputDevice
+    _GPIO_IMPORT_ERROR = None
+except Exception as _e:
+    _GpioOutputDevice = None
+    _GPIO_IMPORT_ERROR = str(_e)
+
+_siren_lock = threading.Lock()
+_siren_state = {
+    "active": False,           # Sirene aktuell an?
+    "phase": None,             # "over" | "ok" -- Hysterese-Zustand
+    "device": None,            # gpiozero-Objekt, lazy erstellt
+    "device_pin": None,        # zuletzt verwendeter Pin (BCM), erkennt Config-Änderungen
+    "device_active_low": None,
+    "error": None,             # letzter Einrichtungs-/Schaltfehler
+}
+
+
+def _siren_get_device(cfg):
+    """Erstellt (bzw. bei geänderter Konfiguration neu) das GPIO-Ausgabe-
+    Objekt für die Sirene. active_low=True (Standard) passt zu den
+    verbreiteten günstigen 1-Kanal-Relaismodulen (Songle SRD-05VDC-SL-C mit
+    Optokoppler-Platine): dort schaltet GPIO LOW das Relais EIN. Modul-
+    Datenblatt/Aufdruck prüfen und in den Einstellungen umschalten, falls
+    die Sirene beim Testen genau andersherum reagiert."""
+    siren_cfg = cfg.get("siren") or {}
+    pin = siren_cfg.get("gpio_pin")
+    active_low = bool(siren_cfg.get("active_low", True))
+    if pin is None:
+        return None
+    with _siren_lock:
+        dev = _siren_state["device"]
+        if (dev is not None and _siren_state["device_pin"] == pin
+                and _siren_state["device_active_low"] == active_low):
+            return dev
+        if dev is not None:
+            try:
+                dev.close()
+            except Exception:
+                pass
+            _siren_state["device"] = None
+        if _GpioOutputDevice is None:
+            _siren_state["error"] = ("gpiozero nicht verfügbar (" + (_GPIO_IMPORT_ERROR or "unbekannter Fehler") +
+                                      ") -- pip install -r requirements.txt, dann Dienst neu starten.")
+            return None
+        try:
+            new_dev = _GpioOutputDevice(int(pin), active_high=not active_low, initial_value=False)
+        except Exception as e:
+            _siren_state["error"] = f"GPIO-Pin {pin} konnte nicht initialisiert werden: {e}"
+            return None
+        _siren_state["device"] = new_dev
+        _siren_state["device_pin"] = pin
+        _siren_state["device_active_low"] = active_low
+        _siren_state["error"] = None
+        return new_dev
+
+
+def _siren_set(on, cfg):
+    dev = _siren_get_device(cfg)
+    if dev is None:
+        return
+    try:
+        dev.on() if on else dev.off()
+        with _siren_lock:
+            _siren_state["active"] = bool(on)
+    except Exception as e:
+        with _siren_lock:
+            _siren_state["error"] = f"Schaltfehler: {e}"
+
+
+def siren_check(state, cfg):
+    """Sirene bei Überlast: einstellbare Schwelle (% Anschlussleistung), mit
+    kleiner Hysterese (Aus erst 3 Prozentpunkte unter der Schwelle), damit
+    das Relais bei einem Wert genau an der Grenze nicht flattert."""
+    siren_cfg = cfg.get("siren") or {}
+    if not siren_cfg.get("enabled"):
+        with _siren_lock:
+            still_active = _siren_state["active"]
+        if still_active:
+            _siren_set(False, cfg)
+        return
+    if not state.get("online") or state.get("percent") is None:
+        return
+
+    threshold = float(siren_cfg.get("threshold_percent") or 90)
+    hysteresis = 3.0
+    pct = state["percent"]
+
+    with _siren_lock:
+        was_over = _siren_state["phase"] == "over"
+
+    if pct >= threshold and not was_over:
+        with _siren_lock:
+            _siren_state["phase"] = "over"
+        _siren_set(True, cfg)
+    elif pct <= (threshold - hysteresis) and was_over:
+        with _siren_lock:
+            _siren_state["phase"] = "ok"
+        _siren_set(False, cfg)
+    else:
+        with _siren_lock:
+            if _siren_state["phase"] is None:
+                _siren_state["phase"] = "ok"
 
 
 # --- Fernwartung: periodischer Selbst-Bericht -------------------------------
@@ -980,6 +1098,56 @@ def api_sms_status():
         if s.get("last_sent_ts") else None
     )
     return JSONResponse(s)
+
+
+@app.get("/api/siren/status")
+def api_siren_status():
+    with _siren_lock:
+        return JSONResponse({
+            "active": _siren_state["active"],
+            "phase": _siren_state["phase"],
+            "error": _siren_state["error"],
+            "gpio_available": _GpioOutputDevice is not None,
+        })
+
+
+@app.post("/api/siren/test")
+async def api_siren_test(request: Request):
+    """Kurzer Testimpuls (2s an, dann aus) mit der (ggf. noch ungespeicherten)
+    Konfig aus dem Formular -- zum Prüfen der Verkabelung ohne echte Überlast."""
+    body = {}
+    try:
+        body = await request.json()
+    except Exception:
+        pass
+    siren_cfg = (body.get("siren") if isinstance(body, dict) else None) or get_config().get("siren", {})
+    test_cfg = dict(get_config())
+    test_cfg["siren"] = siren_cfg
+    dev = _siren_get_device(test_cfg)
+    if dev is None:
+        with _siren_lock:
+            err = _siren_state["error"]
+        return JSONResponse({"ok": False, "error": err or "Sirene nicht konfiguriert (Pin fehlt)."})
+    try:
+        dev.on()
+        with _siren_lock:
+            _siren_state["active"] = True
+
+        def _off_later():
+            time.sleep(2.0)
+            try:
+                dev.off()
+            except Exception:
+                pass
+            with _siren_lock:
+                _siren_state["active"] = False
+
+        threading.Thread(target=_off_later, daemon=True).start()
+        return JSONResponse({"ok": True, "message": "Sirene für 2 Sekunden aktiviert."})
+    except Exception as e:
+        with _siren_lock:
+            _siren_state["error"] = str(e)
+        return JSONResponse({"ok": False, "error": str(e)})
 
 
 @app.post("/api/scan")

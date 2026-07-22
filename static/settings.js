@@ -134,6 +134,12 @@ function collect() {
       pv_eur_kwh: numOrNull($("costs_pv").value) ?? 0.10,
       bereitstellung_eur_kw_jahr: numOrNull($("costs_bereitstellung").value) ?? 0,
     },
+    siren: {
+      enabled: $("siren_enabled").checked,
+      threshold_percent: numOrNull($("siren_threshold").value) ?? 90,
+      gpio_pin: numOrNull($("siren_pin").value),
+      active_low: $("siren_active_low").checked,
+    },
     sms: {
       enabled: $("sms_enabled").checked,
       provider: "seven",
@@ -183,6 +189,11 @@ function apply(cfg) {
   $("costs_bezug").value = co.bezug_eur_kwh ?? 0.35;
   $("costs_pv").value = co.pv_eur_kwh ?? 0.10;
   $("costs_bereitstellung").value = co.bereitstellung_eur_kw_jahr ?? 0;
+  const sr = cfg.siren || {};
+  $("siren_enabled").checked = !!sr.enabled;
+  $("siren_threshold").value = sr.threshold_percent ?? 90;
+  $("siren_pin").value = sr.gpio_pin ?? 17;
+  $("siren_active_low").checked = sr.active_low !== false;
   $("sms_enabled").checked = !!s.enabled;
   $("sms_api_key").value = s.api_key || "";
   $("sms_sender").value = s.sender || "Lastmonitor";
@@ -275,6 +286,19 @@ async function loadCostsStatus() {
   } catch (e) { /* Status ist nur Zusatzinfo, still ignorieren */ }
 }
 
+async function loadSirenStatus() {
+  try {
+    const s = await (await fetch("/api/siren/status", { cache: "no-store" })).json();
+    if (!s.gpio_available) {
+      $("sirenStatus").textContent = "⚠ gpiozero nicht verfügbar auf diesem System — nach Update/Installation Dienst neu starten.";
+      return;
+    }
+    let txt = "Zustand: " + (s.active ? "🔊 AN" : "aus");
+    if (s.error) txt += " · ⚠ " + s.error;
+    $("sirenStatus").textContent = txt;
+  } catch (e) { /* Status ist nur Zusatzinfo, still ignorieren */ }
+}
+
 // ---- Laden / Speichern / Test ----------------------------------------------
 async function load() {
   try { const r = await fetch("/api/config"); apply(await r.json()); }
@@ -282,6 +306,8 @@ async function load() {
   loadStandbyStatus();
   loadCostsStatus();
   setInterval(loadCostsStatus, 30000);
+  loadSirenStatus();
+  setInterval(loadSirenStatus, 15000);
 }
 
 $("profile").addEventListener("change", () => applyProfile($("profile").value));
@@ -319,6 +345,16 @@ $("btnSmsTest").addEventListener("click", async () => {
     setMsg("smsTestMsg", res.ok ? "✓ SMS gesendet" + (res.balance != null ? ` (Guthaben: ${res.balance} €)` : "") : "✗ " + (res.error || "Fehlgeschlagen"), !!res.ok);
   } catch (e) { setMsg("smsTestMsg", "✗ Fehler: " + e, false); }
   loadSmsStatus();
+});
+
+$("btnSirenTest").addEventListener("click", async () => {
+  setMsg("sirenTestMsg", "Aktiviere Sirene für 2 Sekunden …", true);
+  try {
+    const r = await fetch("/api/siren/test", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ siren: collect().siren }) });
+    const res = await r.json();
+    setMsg("sirenTestMsg", res.ok ? "✓ " + res.message : "✗ " + (res.error || "Fehlgeschlagen"), !!res.ok);
+  } catch (e) { setMsg("sirenTestMsg", "✗ Fehler: " + e, false); }
+  setTimeout(loadSirenStatus, 2200);
 });
 
 async function loadSmsStatus() {

@@ -202,6 +202,24 @@
       <div id="provisioningStatus" class="hint" style="margin-top:8px"></div>
     </div>
 
+    <div class="card">
+      <h2>Sirene bei Überlast (GPIO)</h2>
+      <p class="hint" style="margin-bottom:12px">Physischer Signalgeber (Sirene/Blitzleuchte) über ein
+        5V-Relaismodul am GPIO-Header — bewusst ohne WLAN/Netzwerk, reine Verkabelung.
+        <b>Verkabelung:</b> Relais-Steuereingang an den gewählten GPIO-Pin (BCM-Nummer, s.u.) + 5V + GND,
+        die Sirene selbst hängt mit eigenem Netzteil am Relais-Schaltkontakt.
+        <b>Aktiv-LOW</b> passt zu den meisten günstigen 1-Kanal-Relaismodulen (Songle SRD-05VDC-SL-C) —
+        falls die Sirene beim Testen genau andersherum reagiert (an statt aus, aus statt an), hier umschalten.</p>
+      <div class="field toggle"><input id="siren_enabled" type="checkbox" /><label style="margin:0">Sirene aktiviert</label></div>
+      <div class="row">
+        <div class="field"><label>Sirene ab Auslastung (%)</label><input id="siren_threshold" type="number" min="0" max="100" value="90" /></div>
+        <div class="field"><label>GPIO-Pin (BCM-Nummer)</label><input id="siren_pin" type="number" min="0" max="27" value="17" /></div>
+        <div class="field toggle" style="align-self:end"><input id="siren_active_low" type="checkbox" checked /><label style="margin:0">Relais ist Aktiv-LOW</label></div>
+      </div>
+      <div class="btns"><button class="btn-ghost" id="btnSirenTest">Sirene testen (2 Sek.)</button><span id="sirenTestMsg" class="msg"></span></div>
+      <div id="sirenStatus" class="hint" style="margin-top:8px"></div>
+    </div>
+
     <div class="btns">
       <button class="btn-primary" id="btnSave">Speichern und neuladen</button>
       <a href="/" class="btn-ghost" style="text-decoration:none;display:inline-block">Zur Anzeige</a>

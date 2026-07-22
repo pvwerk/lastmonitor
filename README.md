@@ -76,6 +76,22 @@ Wichtigste Register (verifiziert, Doku „PLOpenGateway_Definitionen.xlsx"):
   (Standard: nach 3 Min. durchgehend offline) — denn ohne Verbindung wird
   auch die Überlast-Schwelle nicht überwacht. Hinweis: Fällt das Internet
   selbst aus, kann in dem Moment keine SMS raus.
+- **Bereitstellungskosten (Leistungspreis)**: Preis pro kW Anschlussleistung
+  und Jahr (€/kW/Jahr) eintragen. In der Büro-Übersicht (`/office`) erscheint
+  daraus eine Tabelle mit möglicher Ersparnis, wenn die Lastspitze gekappt
+  würde (erste Zeile: Jahresspitze abgerundet auf die nächste 5-kW-Stufe,
+  dann -5 kW je Zeile bis minimal 60 kW), jeweils Ersparnis pro Monat und
+  pro Jahr. Basis ist die ohnehin live nachgeführte Jahresspitze — ein neuer
+  Rekord fließt automatisch ein.
+- **Sirene bei Überlast (GPIO)**: physischer Signalgeber (Sirene/Blitzleuchte)
+  über ein 5V-Relaismodul am GPIO-Header, bewusst ohne WLAN/Netzwerk (reine
+  Verkabelung). Einstellbar: Schwelle (%, unabhängig von Warn-/Kritisch-%),
+  GPIO-Pin (BCM-Nummer), Aktiv-LOW (Standard, passt zu den meisten günstigen
+  1-Kanal-Relaismodulen). Test-Knopf (2 Sekunden) zum Prüfen der Verkabelung.
+  Kleine Hysterese (3 Prozentpunkte) gegen Relais-Flattern genau an der
+  Schwelle. Braucht `gpiozero` + `lgpio` (in `requirements.txt`) sowie
+  Mitgliedschaft in der `gpio`-Gruppe (richtet `deploy/install.sh` /
+  `deploy/update.sh` automatisch ein).
 
 ## Updates einspielen
 **Am einfachsten:** in den Einstellungen (`/settings`) den Knopf **„Auf neueste Version aktualisieren"**.

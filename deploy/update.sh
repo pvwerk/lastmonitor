@@ -12,6 +12,9 @@ git pull --ff-only
 echo "==> Abhängigkeiten aktualisieren …"
 "$APP_DIR/venv/bin/pip" install -r "$APP_DIR/requirements.txt"
 
+echo "==> GPIO-Zugriff (Sirene bei Überlast) …"
+sudo usermod -aG gpio "${SUDO_USER:-$USER}" || true
+
 echo "==> Dienst neu starten …"
 sudo systemctl restart lastmonitor.service
 echo "==> Fertig. Status:"
